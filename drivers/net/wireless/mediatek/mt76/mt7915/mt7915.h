@@ -64,6 +64,13 @@ enum mt7915_rxq_id {
 	MT7915_RXQ_MCU_WA_EXT,
 };
 
+struct mt7915_sta_stats {
+	unsigned long tx_mode[MT_PHY_TYPE_HE_LAST]; /* See mt76_phy_type */
+	unsigned long tx_bw[4]; /* 20, 40, 80, 160 */
+	unsigned long tx_nss[4]; /* 1, 2, 3, 4 */
+	unsigned long tx_mcs[16]; /* mcs idx */
+};
+
 struct mt7915_sta_key_conf {
 	s8 keyidx;
 	u8 key[16];
@@ -82,8 +89,11 @@ struct mt7915_sta {
 	unsigned long jiffies;
 	unsigned long ampdu_state;
 
+	struct mt7915_sta_stats stats;
+
 	struct mt7915_sta_key_conf bip;
 };
+
 struct mt7915_vif {
 	u16 idx;
 	u8 omac_idx;
@@ -103,6 +113,7 @@ struct mib_stats {
 	u32 rts_cnt;
 	u32 rts_retries_cnt;
 	u32 ba_miss_cnt;
+	/* Add more stats here, updated from mac_update_stats */
 };
 
 struct mt7915_hif {
