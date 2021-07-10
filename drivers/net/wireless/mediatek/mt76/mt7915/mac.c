@@ -1311,7 +1311,7 @@ mt7915_mac_tx_free(struct mt7915_dev *dev, struct sk_buff *skb)
 
 static bool
 mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
-		       __le32 *txs_data)
+		       __le32 *txs_data, struct mt7915_sta_stats *stats)
 {
 	struct ieee80211_supported_band *sband;
 	struct mt76_dev *mdev = &dev->mt76;
@@ -1321,7 +1321,7 @@ mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
 	struct rate_info rate = {};
 	struct sk_buff *skb;
 	bool cck = false;
-	u32 txrate, txs;
+	u32 txrate, txs, mode;
 
 	mt76_tx_status_lock(mdev, &list);
 	skb = mt76_tx_status_skb_get(mdev, wcid, pid, &list);
@@ -1340,15 +1340,23 @@ mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
 
 	info->status.rates[0].idx = -1;
 
-	if (!wcid->sta)
-		goto out;
-
 	txrate = FIELD_GET(MT_TXS0_TX_RATE, txs);
 
 	rate.mcs = FIELD_GET(MT_TX_RATE_IDX, txrate);
 	rate.nss = FIELD_GET(MT_TX_RATE_NSS, txrate) + 1;
 
-	switch (FIELD_GET(MT_TX_RATE_MODE, txrate)) {
+	stats->tx_nss[rate.nss - 1]++;
+	/* It appears that rate.mcs even for HT may be small, considering in HT
+	 * code below it is multiplied... but not certain on that,
+	 * so code safely.
+	 */
+	if (rate.mcs >= ARRAY_SIZE(stats->tx_mcs))
+		stats->tx_mcs[ARRAY_SIZE(stats->tx_mcs) - 1]++;
+	else
+		stats->tx_mcs[rate.mcs]++;
+
+	mode = FIELD_GET(MT_TX_RATE_MODE, txrate);
+	switch (mode) {
 	case MT_PHY_TYPE_CCK:
 		cck = true;
 		fallthrough;
@@ -1396,18 +1404,24 @@ mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
 		goto out;
 	}
 
+	stats->tx_mode[mode]++;
+
 	switch (FIELD_GET(MT_TXS0_BW, txs)) {
 	case IEEE80211_STA_RX_BW_160:
 		rate.bw = RATE_INFO_BW_160;
+		stats->tx_bw[3]++;
 		break;
 	case IEEE80211_STA_RX_BW_80:
 		rate.bw = RATE_INFO_BW_80;
+		stats->tx_bw[2]++;
 		break;
 	case IEEE80211_STA_RX_BW_40:
 		rate.bw = RATE_INFO_BW_40;
+		stats->tx_bw[1]++;
 		break;
 	default:
 		rate.bw = RATE_INFO_BW_20;
+		stats->tx_bw[0]++;
 		break;
 	}
 	wcid->rate = rate;
@@ -1450,12 +1464,13 @@ static void mt7915_mac_add_txs(struct mt7915_dev *dev, void *data)
 	if (!wcid)
 		goto out;
 
-	mt7915_mac_add_txs_skb(dev, wcid, pid, txs_data);
+	msta = container_of(wcid, struct mt7915_sta, wcid);
+
+	mt7915_mac_add_txs_skb(dev, wcid, pid, txs_data, &msta->stats);
 
 	if (!wcid->sta)
 		goto out;
 
-	msta = container_of(wcid, struct mt7915_sta, wcid);
 	spin_lock_bh(&dev->sta_poll_lock);
 	if (list_empty(&msta->poll_list))
 		list_add_tail(&msta->poll_list, &dev->sta_poll_list);
