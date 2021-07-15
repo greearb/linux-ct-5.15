@@ -1443,7 +1443,7 @@ static bool mt7615_mac_add_txs_skb(struct mt7615_dev *dev,
 			info->status.rates[0].idx = -1;
 		}
 
-		mt76_tx_status_skb_done(mdev, skb, &list);
+		mt76_tx_status_skb_done(mdev, skb, &list, &sta->wcid);
 	}
 	mt76_tx_status_unlock(mdev, &list);
 

@@ -235,6 +235,16 @@ DECLARE_EWMA(signal, 10, 8);
 #define MT_WCID_TX_INFO_TXPWR_ADJ	GENMASK(25, 18)
 #define MT_WCID_TX_INFO_SET		BIT(31)
 
+#define MT_PACKET_ID_MASK		GENMASK(6, 0)
+#define MT_PACKET_ID_NO_ACK		0
+/* Request TXS, but don't try to match with skb. */
+#define MT_PACKET_ID_NO_SKB		1
+#define MT_PACKET_ID_FIRST		2
+#define MT_PACKET_ID_HAS_RATE		BIT(7)
+#define MT_PACKET_ID_MAX		(GENMASK(7, 0) - 1)
+#define MT_NUM_STATUS_PACKETS \
+	(MT_PACKET_ID_MAX + 1 - MT_PACKET_ID_FIRST)
+
 struct mt76_wcid {
 	struct mt76_rx_tid __rcu *aggr[IEEE80211_NUM_TIDS];
 
@@ -245,6 +255,8 @@ struct mt76_wcid {
 	int inactive_count;
 
 	struct rate_info rate;
+
+	struct sk_buff *skb_status_array[MT_NUM_STATUS_PACKETS];
 
 	u16 idx;
 	u8 hw_key_idx;
@@ -302,16 +314,16 @@ struct mt76_rx_tid {
 #define MT_TX_CB_TXS_DONE		BIT(1)
 #define MT_TX_CB_TXS_FAILED		BIT(2)
 
-#define MT_PACKET_ID_MASK		GENMASK(6, 0)
-#define MT_PACKET_ID_NO_ACK		0
-#define MT_PACKET_ID_NO_SKB		1
-#define MT_PACKET_ID_FIRST		2
-#define MT_PACKET_ID_HAS_RATE		BIT(7)
-
-#define MT_TX_STATUS_SKB_TIMEOUT	HZ
+/* This is timer for when to give up when waiting for TXS callback,
+ * with starting time being the time at which the DMA_DONE callback
+ * was seen (so, we know packet was processed then, it should not take
+ * long after that for firmware to send the TXS callback if it is going
+ * to do so.)
+ */
+#define MT_TX_STATUS_SKB_TIMEOUT	(HZ / 4)
 
 struct mt76_tx_cb {
-	unsigned long jiffies;
+	unsigned long jiffies; /* for when DMA_DONE was reported. */
 	u16 wcid;
 	u8 pktid;
 	u8 flags;
@@ -651,6 +663,7 @@ struct mt76_dev {
 	spinlock_t cc_lock;
 
 	u32 cur_cc_bss_rx;
+	unsigned long next_status_jiffies;
 
 	struct mt76_rx_status rx_ampdu_status;
 	u32 rx_ampdu_len;
@@ -1096,7 +1109,7 @@ struct sk_buff *mt76_tx_status_skb_get(struct mt76_dev *dev,
 				       struct mt76_wcid *wcid, int pktid,
 				       struct sk_buff_head *list);
 void mt76_tx_status_skb_done(struct mt76_dev *dev, struct sk_buff *skb,
-			     struct sk_buff_head *list);
+			     struct sk_buff_head *list, struct mt76_wcid *wcid);
 void __mt76_tx_complete_skb(struct mt76_dev *dev, u16 wcid, struct sk_buff *skb,
 			    struct list_head *free_list);
 static inline void
@@ -1303,12 +1316,23 @@ mt76_token_put(struct mt76_dev *dev, int token)
 }
 
 static inline int
-mt76_get_next_pkt_id(struct mt76_wcid *wcid)
+mt76_get_next_pkt_id(struct mt76_dev *dev, struct mt76_wcid *wcid,
+		     struct sk_buff *skb)
 {
+	struct sk_buff *qskb;
+
+	lockdep_assert_held(&dev->status_list.lock);
+
 	wcid->packet_id = (wcid->packet_id + 1) & MT_PACKET_ID_MASK;
-	if (wcid->packet_id == MT_PACKET_ID_NO_ACK ||
-	    wcid->packet_id == MT_PACKET_ID_NO_SKB)
+	if (wcid->packet_id < MT_PACKET_ID_FIRST)
 		wcid->packet_id = MT_PACKET_ID_FIRST;
+
+	qskb = wcid->skb_status_array[wcid->packet_id - MT_PACKET_ID_FIRST];
+	if (qskb)
+		/* bummer, already waiting on this pid.  Other logic
+		 * will clean up stale entries.
+		 */
+		return MT_PACKET_ID_NO_SKB;
 
 	return wcid->packet_id;
 }

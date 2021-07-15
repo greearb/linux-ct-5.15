@@ -1234,7 +1234,7 @@ mt7603_mac_add_txs_skb(struct mt7603_dev *dev, struct mt7603_sta *sta, int pid,
 			info->status.rates[0].idx = -1;
 		}
 
-		mt76_tx_status_skb_done(mdev, skb, &list);
+		mt76_tx_status_skb_done(mdev, skb, &list, &sta->wcid);
 	}
 	mt76_tx_status_unlock(mdev, &list);
 
