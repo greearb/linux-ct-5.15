@@ -623,7 +623,7 @@ void mt76x02_send_tx_status(struct mt76x02_dev *dev,
 		info = *status.info;
 		len = status.skb->len;
 		ac = skb_get_queue_mapping(status.skb);
-		mt76_tx_status_skb_done(mdev, status.skb, &list);
+		mt76_tx_status_skb_done(mdev, status.skb, &list, wcid);
 	} else if (msta) {
 		len = status.info->status.ampdu_len * ewma_pktlen_read(&msta->pktlen);
 		ac = FIELD_GET(MT_PKTID_AC, cur_pktid);

@@ -36,6 +36,7 @@ mt76_tx_check_agg_ssn(struct ieee80211_sta *sta, struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(mt76_tx_check_agg_ssn);
 
+/* Lock list, and initialize the timed-out-skb list object. */
 void
 mt76_tx_status_lock(struct mt76_dev *dev, struct sk_buff_head *list)
 		   __acquires(&dev->status_list.lock)
@@ -45,6 +46,9 @@ mt76_tx_status_lock(struct mt76_dev *dev, struct sk_buff_head *list)
 }
 EXPORT_SYMBOL_GPL(mt76_tx_status_lock);
 
+/* Unlock list, and use last-received status for any skbs that
+ * timed out getting TXS callback (they are on the list passed in
+ */
 void
 mt76_tx_status_unlock(struct mt76_dev *dev, struct sk_buff_head *list)
 		      __releases(&dev->status_list.lock)
@@ -80,19 +84,43 @@ EXPORT_SYMBOL_GPL(mt76_tx_status_unlock);
 
 static void
 __mt76_tx_status_skb_done(struct mt76_dev *dev, struct sk_buff *skb, u8 flags,
-			  struct sk_buff_head *list)
+			  struct sk_buff_head *list, struct mt76_wcid *wcid)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct mt76_tx_cb *cb = mt76_tx_skb_cb(skb);
 	u8 done = MT_TX_CB_DMA_DONE | MT_TX_CB_TXS_DONE;
 
+	lockdep_assert_held(&dev->status_list.lock);
+
+	/* Start timer for TXS callback expiration. */
+	if (flags & MT_TX_CB_DMA_DONE)
+		cb->jiffies = jiffies;
+
 	flags |= cb->flags;
 	cb->flags = flags;
 
+	/* Only process skb with TXS status has been received and also
+	 * the txfree (DMA_DONE) callback has happened.
+	 */
 	if ((flags & done) != done)
 		return;
 
 	__skb_unlink(skb, &dev->status_list);
+
+	rcu_read_lock();
+	/* calling code may not know wcid, for instance in the tx_status_check
+	 * path, look it up in that case.
+	 */
+	if (!wcid)
+		wcid = rcu_dereference(dev->wcid[cb->wcid]);
+
+	/* Make sure we clear any cached skb. */
+	if (wcid) {
+		if (!(WARN_ON_ONCE(cb->pktid - MT_PACKET_ID_FIRST
+				   >= ARRAY_SIZE(wcid->skb_status_array))))
+			wcid->skb_status_array[cb->pktid - MT_PACKET_ID_FIRST] = NULL;
+	}
+	rcu_read_unlock();
 
 	/* Tx status can be unreliable. if it fails, mark the frame as ACKed */
 	if (flags & MT_TX_CB_TXS_FAILED) {
@@ -106,9 +134,9 @@ __mt76_tx_status_skb_done(struct mt76_dev *dev, struct sk_buff *skb, u8 flags,
 
 void
 mt76_tx_status_skb_done(struct mt76_dev *dev, struct sk_buff *skb,
-			struct sk_buff_head *list)
+			struct sk_buff_head *list, struct mt76_wcid *wcid)
 {
-	__mt76_tx_status_skb_done(dev, skb, MT_TX_CB_TXS_DONE, list);
+	__mt76_tx_status_skb_done(dev, skb, MT_TX_CB_TXS_DONE, list, wcid);
 }
 EXPORT_SYMBOL_GPL(mt76_tx_status_skb_done);
 
@@ -133,12 +161,16 @@ mt76_tx_status_skb_add(struct mt76_dev *dev, struct mt76_wcid *wcid,
 	spin_lock_bh(&dev->status_list.lock);
 
 	memset(cb, 0, sizeof(*cb));
-	pid = mt76_get_next_pkt_id(wcid);
+	pid = mt76_get_next_pkt_id(dev, wcid, skb);
 	cb->wcid = wcid->idx;
 	cb->pktid = pid;
-	cb->jiffies = jiffies;
 
-	__skb_queue_tail(&dev->status_list, skb);
+	if (cb->pktid != MT_PACKET_ID_NO_SKB) {
+		__skb_queue_tail(&dev->status_list, skb);
+		/* cache this skb for fast lookup by packet-id */
+		wcid->skb_status_array[pid - MT_PACKET_ID_FIRST] = skb;
+	}
+
 	spin_unlock_bh(&dev->status_list.lock);
 
 	return pid;
@@ -150,25 +182,65 @@ mt76_tx_status_skb_get(struct mt76_dev *dev, struct mt76_wcid *wcid, int pktid,
 		       struct sk_buff_head *list)
 {
 	struct sk_buff *skb, *tmp;
+	struct sk_buff *rvskb = NULL;
 
+	/* If pktid is < first-valid-id, then it is not something we requested
+	 * TXS for, so we will not find SKB.  Bail out early in that case,
+	 * unless we need to walk due to stale-skb-reaper timeout.
+	 */
+	if (pktid < MT_PACKET_ID_FIRST) {
+		if (!time_after(jiffies, dev->next_status_jiffies))
+			return NULL;
+		goto check_list;
+	}
+
+	if (wcid) {
+		lockdep_assert_held(&dev->status_list.lock);
+		if (WARN_ON_ONCE(pktid - MT_PACKET_ID_FIRST
+				 >= ARRAY_SIZE(wcid->skb_status_array))) {
+			dev_err(dev->dev, "invalid pktid: %d  status-array-size: %d\n",
+				pktid, (int)(ARRAY_SIZE(wcid->skb_status_array)));
+			WARN_ON_ONCE(true);
+			goto check_list;
+		}
+
+		skb = wcid->skb_status_array[pktid - MT_PACKET_ID_FIRST];
+
+		if (skb && !time_after(jiffies, dev->next_status_jiffies))
+			return skb;
+	}
+
+check_list:
 	skb_queue_walk_safe(&dev->status_list, skb, tmp) {
 		struct mt76_tx_cb *cb = mt76_tx_skb_cb(skb);
 
 		if (wcid && cb->wcid != wcid->idx)
 			continue;
 
-		if (cb->pktid == pktid)
-			return skb;
+		if (cb->pktid == pktid) {
+			/* Found our skb, but check for timeouts too */
+			rvskb = skb;
+			continue;
+		}
 
+		/* Cannot time out anything that does not have DMA completed. */
+		if (!(cb->flags & MT_TX_CB_DMA_DONE))
+			continue;
+
+		/* Check if it has been too long since DMA_DONE was reported. */
 		if (pktid >= 0 && !time_after(jiffies, cb->jiffies +
 					      MT_TX_STATUS_SKB_TIMEOUT))
 			continue;
 
+		/* It has been too long since DMA_DONE, time out this packet
+		 * and stop waiting for TXS callback.
+		 */
 		__mt76_tx_status_skb_done(dev, skb, MT_TX_CB_TXS_FAILED |
-						    MT_TX_CB_TXS_DONE, list);
+					  MT_TX_CB_TXS_DONE, list, wcid);
 	}
+	dev->next_status_jiffies = jiffies + MT_TX_STATUS_SKB_TIMEOUT + 1;
 
-	return NULL;
+	return rvskb;
 }
 EXPORT_SYMBOL_GPL(mt76_tx_status_skb_get);
 
@@ -238,7 +310,7 @@ void __mt76_tx_complete_skb(struct mt76_dev *dev, u16 wcid_idx, struct sk_buff *
 	}
 
 	mt76_tx_status_lock(dev, &list);
-	__mt76_tx_status_skb_done(dev, skb, MT_TX_CB_DMA_DONE, &list);
+	__mt76_tx_status_skb_done(dev, skb, MT_TX_CB_DMA_DONE, &list, wcid);
 	mt76_tx_status_unlock(dev, &list);
 
 out:

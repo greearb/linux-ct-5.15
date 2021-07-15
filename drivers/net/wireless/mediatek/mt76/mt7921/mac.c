@@ -781,7 +781,9 @@ mt7921_mac_write_txwi_80211(struct mt7921_dev *dev, __le32 *txwi,
 	txwi[7] |= cpu_to_le32(val);
 }
 
-static void mt7921_update_txs(struct mt76_wcid *wcid, __le32 *txwi)
+static void mt7921_update_txs(struct mt7921_dev *dev,
+			      struct mt76_wcid *wcid, __le32 *txwi,
+			      struct sk_buff *skb)
 {
 	struct mt7921_sta *msta = container_of(wcid, struct mt7921_sta, wcid);
 	u32 pid, frame_type;
@@ -794,7 +796,7 @@ static void mt7921_update_txs(struct mt76_wcid *wcid, __le32 *txwi)
 		return;
 
 	msta->next_txs_ts = jiffies + msecs_to_jiffies(250);
-	pid = mt76_get_next_pkt_id(wcid);
+	pid = mt76_get_next_pkt_id(&dev->mt76, wcid, skb);
 	txwi[5] |= cpu_to_le32(MT_TXD5_TX_STATUS_MCU |
 			       FIELD_PREP(MT_TXD5_PID, pid));
 }
@@ -821,7 +823,6 @@ void mt7921_mac_write_txwi(struct mt7921_dev *dev, __le32 *txwi,
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_vif *vif = info->control.vif;
-	struct mt76_phy *mphy = &dev->mphy;
 	u8 p_fmt, q_idx, omac_idx = 0, wmm_idx = 0;
 	bool is_8023 = info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP;
 	u16 tx_count = 15;
@@ -889,7 +890,7 @@ void mt7921_mac_write_txwi(struct mt7921_dev *dev, __le32 *txwi,
 		txwi[3] |= cpu_to_le32(MT_TXD3_BA_DISABLE);
 	}
 
-	mt7921_update_txs(wcid, txwi);
+	mt7921_update_txs(dev, wcid, txwi, skb);
 }
 
 static void

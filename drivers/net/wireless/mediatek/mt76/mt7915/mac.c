@@ -1318,6 +1318,7 @@ mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
 
 	mt76_tx_status_lock(mdev, &list);
 	skb = mt76_tx_status_skb_get(mdev, wcid, pid, &list);
+
 	if (!skb)
 		goto out;
 
@@ -1417,10 +1418,11 @@ mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
 		stats->tx_bw[0]++;
 		break;
 	}
+
 	wcid->rate = rate;
 
 out:
-	mt76_tx_status_skb_done(mdev, skb, &list);
+	mt76_tx_status_skb_done(mdev, skb, &list, wcid);
 	mt76_tx_status_unlock(mdev, &list);
 
 	return !!skb;
