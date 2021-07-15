@@ -205,12 +205,17 @@ static void mt7915_mac_sta_poll(struct mt7915_dev *dev)
 			u8 offs = 24 + 2 * bw;
 
 			rate->he_gi = (val & (0x3 << offs)) >> offs;
+			msta->wcid.rate_he_gi = rate->he_gi; /* cache for later */
 		} else if (rate->flags & RATE_INFO_FLAGS_VHT_MCS) {
-			if (val & BIT(12 + bw))
+			if (val & BIT(12 + bw)) {
 				rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
-			else
+				msta->wcid.rate_short_gi = 1;
+			} else {
 				rate->flags &= ~RATE_INFO_FLAGS_SHORT_GI;
+				msta->wcid.rate_short_gi = 0;
+			}
 		}
+		/* TODO:  Deal with HT_MCS */
 	}
 
 	rcu_read_unlock();
@@ -1309,29 +1314,19 @@ mt7915_mac_tx_free(struct mt7915_dev *dev, struct sk_buff *skb)
 	}
 }
 
-static bool
-mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
-		       __le32 *txs_data, struct mt7915_sta_stats *stats)
+static void
+mt7915_mac_parse_txs(struct mt7915_dev *dev, struct mt76_wcid *wcid,
+		     __le32 *txs_data, struct mt7915_sta_stats *stats,
+		     struct rate_info *rate,
+		     struct ieee80211_tx_info *info)
 {
 	struct ieee80211_supported_band *sband;
-	struct mt76_dev *mdev = &dev->mt76;
 	struct mt76_phy *mphy;
-	struct ieee80211_tx_info *info;
-	struct sk_buff_head list;
-	struct rate_info rate = {};
-	struct sk_buff *skb;
-	bool cck = false;
 	u32 txrate, txs, mode;
-
-	mt76_tx_status_lock(mdev, &list);
-	skb = mt76_tx_status_skb_get(mdev, wcid, pid, &list);
-
-	if (!skb)
-		goto out_no_skb;
+	bool cck = false;
 
 	txs = le32_to_cpu(txs_data[0]);
 
-	info = IEEE80211_SKB_CB(skb);
 	if (!(txs & cpu_to_le32(MT_TXS0_ACK_ERROR_MASK)))
 		info->flags |= IEEE80211_TX_STAT_ACK;
 
@@ -1343,18 +1338,18 @@ mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
 
 	txrate = FIELD_GET(MT_TXS0_TX_RATE, txs);
 
-	rate.mcs = FIELD_GET(MT_TX_RATE_IDX, txrate);
-	rate.nss = FIELD_GET(MT_TX_RATE_NSS, txrate) + 1;
+	rate->mcs = FIELD_GET(MT_TX_RATE_IDX, txrate);
+	rate->nss = FIELD_GET(MT_TX_RATE_NSS, txrate) + 1;
 
-	stats->tx_nss[rate.nss - 1]++;
+	stats->tx_nss[rate->nss - 1]++;
 	/* It appears that rate.mcs even for HT may be small, considering in HT
 	 * code below it is multiplied... but not certain on that,
 	 * so code safely.
 	 */
-	if (rate.mcs >= ARRAY_SIZE(stats->tx_mcs))
+	if (rate->mcs >= ARRAY_SIZE(stats->tx_mcs))
 		stats->tx_mcs[ARRAY_SIZE(stats->tx_mcs) - 1]++;
 	else
-		stats->tx_mcs[rate.mcs]++;
+		stats->tx_mcs[rate->mcs]++;
 
 	mode = FIELD_GET(MT_TX_RATE_MODE, txrate);
 	switch (mode) {
@@ -1371,70 +1366,95 @@ mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
 		else
 			sband = &mphy->sband_2g.sband;
 
-		rate.mcs = mt76_get_rate(mphy->dev, sband, rate.mcs, cck);
-		rate.legacy = sband->bitrates[rate.mcs].bitrate;
+		rate->mcs = mt76_get_rate(mphy->dev, sband, rate->mcs, cck);
+		rate->legacy = sband->bitrates[rate->mcs].bitrate;
 		break;
 	case MT_PHY_TYPE_HT:
 	case MT_PHY_TYPE_HT_GF:
-		rate.mcs += (rate.nss - 1) * 8;
-		if (rate.mcs > 31)
-			goto out;
+		rate->mcs += (rate->nss - 1) * 8;
+		if (rate->mcs > 31)
+			break;
 
-		rate.flags = RATE_INFO_FLAGS_MCS;
-		if (wcid->rate.flags & RATE_INFO_FLAGS_SHORT_GI)
-			rate.flags |= RATE_INFO_FLAGS_SHORT_GI;
+		rate->flags = RATE_INFO_FLAGS_MCS;
+		if (wcid->rate_short_gi)
+			rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
 		break;
 	case MT_PHY_TYPE_VHT:
-		if (rate.mcs > 9)
-			goto out;
+		if (rate->mcs > 9)
+			break;
 
-		rate.flags = RATE_INFO_FLAGS_VHT_MCS;
+		rate->flags = RATE_INFO_FLAGS_VHT_MCS;
+		if (wcid->rate_short_gi)
+			rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
 		break;
 	case MT_PHY_TYPE_HE_SU:
 	case MT_PHY_TYPE_HE_EXT_SU:
 	case MT_PHY_TYPE_HE_TB:
 	case MT_PHY_TYPE_HE_MU:
-		if (rate.mcs > 11)
-			goto out;
+		if (rate->mcs > 11)
+			break;
 
-		rate.he_gi = wcid->rate.he_gi;
-		rate.he_dcm = FIELD_GET(MT_TX_RATE_DCM, txrate);
-		rate.flags = RATE_INFO_FLAGS_HE_MCS;
+		rate->he_gi = wcid->rate_he_gi;
+		rate->he_dcm = FIELD_GET(MT_TX_RATE_DCM, txrate);
+		rate->flags = RATE_INFO_FLAGS_HE_MCS;
 		break;
 	default:
-		goto out;
+		WARN_ON_ONCE(true);
+		mode = 0;
 	}
 
 	stats->tx_mode[mode]++;
 
 	switch (FIELD_GET(MT_TXS0_BW, txs)) {
 	case IEEE80211_STA_RX_BW_160:
-		rate.bw = RATE_INFO_BW_160;
+		rate->bw = RATE_INFO_BW_160;
 		stats->tx_bw[3]++;
 		break;
 	case IEEE80211_STA_RX_BW_80:
-		rate.bw = RATE_INFO_BW_80;
+		rate->bw = RATE_INFO_BW_80;
 		stats->tx_bw[2]++;
 		break;
 	case IEEE80211_STA_RX_BW_40:
-		rate.bw = RATE_INFO_BW_40;
+		rate->bw = RATE_INFO_BW_40;
 		stats->tx_bw[1]++;
 		break;
 	default:
-		rate.bw = RATE_INFO_BW_20;
+		rate->bw = RATE_INFO_BW_20;
 		stats->tx_bw[0]++;
 		break;
 	}
+}
 
-	wcid->rate = rate;
+static void
+mt7915_mac_add_txs_skb(struct mt7915_dev *dev, struct mt76_wcid *wcid, int pid,
+		       __le32 *txs_data, struct mt7915_sta_stats *stats)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	struct ieee80211_tx_info *info;
+	struct ieee80211_tx_info info_stack;
+	struct sk_buff_head list;
+	/* rate is cached in wcid->rate for skbs that do not request to be
+	 * paired with TXS data.  This is normal datapath.
+	 */
+	struct rate_info *rate = &wcid->rate;
+	struct sk_buff *skb;
 
-out:
-	mt76_tx_status_skb_done(mdev, skb, &list, wcid);
+	mt76_tx_status_lock(mdev, &list);
+	skb = mt76_tx_status_skb_get(mdev, wcid, pid, &list);
 
-out_no_skb:
+	memset(rate, 0, sizeof(*rate));
+
+	if (skb)
+		info = IEEE80211_SKB_CB(skb);
+	else
+		info = &info_stack;
+
+	mt7915_mac_parse_txs(dev, wcid, txs_data, stats, rate, info);
+
+	if (skb)
+		mt76_tx_status_skb_done(mdev, skb, &list, wcid);
+
 	mt76_tx_status_unlock(mdev, &list);
-
-	return !!skb;
 }
 
 static void mt7915_mac_add_txs(struct mt7915_dev *dev, void *data)
