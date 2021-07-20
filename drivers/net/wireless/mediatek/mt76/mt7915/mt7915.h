@@ -162,6 +162,8 @@ struct mib_stats {
 	u32 rx_pfdrop_cnt;
 	u32 rx_vec_queue_overflow_drop_cnt;
 	u32 rx_ba_cnt;
+
+	u32 amsdu_pack_stats[8]; /* histogram of how many sub-frames in amsdu */
 };
 
 struct mt7915_hif {

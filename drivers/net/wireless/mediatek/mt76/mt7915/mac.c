@@ -2175,6 +2175,11 @@ mt7915_mac_update_stats(struct mt7915_phy *phy)
 		dev->mt76.aggr_stats[aggr1++] += val & 0xffff;
 		dev->mt76.aggr_stats[aggr1++] += val >> 16;
 	}
+
+	/* Tx amsdu info (pack-count histogram) */
+	for (i = 0; i < ARRAY_SIZE(mib->amsdu_pack_stats); i++)
+		mib->amsdu_pack_stats[i] += mt76_rr(dev,  MT_PLE_AMSDU_PACK_MSDU_CNT(i));
+
 }
 
 void mt7915_mac_sta_rc_work(struct work_struct *work)
