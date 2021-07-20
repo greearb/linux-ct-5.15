@@ -1093,6 +1093,10 @@ static const char mt7915_gstrings_stats[][ETH_GSTRING_LEN] = {
 	"rx_ba_cnt",
 
 	/* per vif counters */
+	"v_tx_mpdu_attempts", /* counting any retries */
+	"v_tx_mpdu_fail",  /* frames that failed even after retry */
+	"v_tx_mpdu_retry", /* number of times frames were retried */
+	"v_tx_mpdu_ok", /* frames that succeeded, perhaps after retry */
 	"v_tx_mode_cck",
 	"v_tx_mode_ofdm",
 	"v_tx_mode_ht",
@@ -1165,6 +1169,10 @@ static void mt7915_ethtool_worker(void *wi_data, struct ieee80211_sta *sta)
 
 	wi->sta_count++;
 
+	data[ei++] += mstats->tx_mpdu_attempts;
+	data[ei++] += mstats->tx_mpdu_fail;
+	data[ei++] += mstats->tx_mpdu_retry;
+	data[ei++] += mstats->tx_mpdu_ok;
 	data[ei++] += mstats->tx_mode[MT_PHY_TYPE_CCK];
 	data[ei++] += mstats->tx_mode[MT_PHY_TYPE_OFDM];
 	data[ei++] += mstats->tx_mode[MT_PHY_TYPE_HT];

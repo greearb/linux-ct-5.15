@@ -65,6 +65,10 @@ enum mt7915_rxq_id {
 };
 
 struct mt7915_sta_stats {
+	unsigned long tx_mpdu_attempts; /* counting any retries */
+	unsigned long tx_mpdu_fail; /* frames that failed even after retry */
+	unsigned long tx_mpdu_ok; /* frames that succeeded, perhaps after retry */
+	unsigned long tx_mpdu_retry; /* number of times frames were retried */
 	unsigned long tx_mode[MT_PHY_TYPE_HE_LAST]; /* See mt76_phy_type */
 	unsigned long tx_bw[4]; /* 20, 40, 80, 160 */
 	unsigned long tx_nss[4]; /* 1, 2, 3, 4 */
