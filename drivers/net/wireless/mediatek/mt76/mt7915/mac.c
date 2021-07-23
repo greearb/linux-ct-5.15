@@ -2203,8 +2203,8 @@ mt7915_mac_update_stats(struct mt7915_phy *phy)
 	}
 
 	/* Tx amsdu info (pack-count histogram) */
-	for (i = 0; i < ARRAY_SIZE(mib->amsdu_pack_stats); i++)
-		mib->amsdu_pack_stats[i] += mt76_rr(dev,  MT_PLE_AMSDU_PACK_MSDU_CNT(i));
+	for (i = 0; i < ARRAY_SIZE(mib->tx_amsdu_pack_stats); i++)
+		mib->tx_amsdu_pack_stats[i] += mt76_rr(dev,  MT_PLE_AMSDU_PACK_MSDU_CNT(i));
 
 }
 

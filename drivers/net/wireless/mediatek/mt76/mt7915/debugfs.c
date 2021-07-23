@@ -488,11 +488,11 @@ mt7915_tx_stats_show(struct seq_file *file, void *data)
 
 	/* Tx amsdu info */
 	seq_puts(file, "Tx MSDU statistics:\n");
-	for (i = 0, n = 0; i < ARRAY_SIZE(mib->amsdu_pack_stats); i++)
-		n += mib->amsdu_pack_stats[i];
+	for (i = 0, n = 0; i < ARRAY_SIZE(mib->tx_amsdu_pack_stats); i++)
+		n += mib->tx_amsdu_pack_stats[i];
 
-	for (i = 0; i < ARRAY_SIZE(mib->amsdu_pack_stats); i++) {
-		long si = mib->amsdu_pack_stats[i];
+	for (i = 0; i < ARRAY_SIZE(mib->tx_amsdu_pack_stats); i++) {
+		long si = mib->tx_amsdu_pack_stats[i];
 
 		seq_printf(file, "AMSDU pack count of %d MSDU in TXD: %ld ",
 			   i + 1, si);
