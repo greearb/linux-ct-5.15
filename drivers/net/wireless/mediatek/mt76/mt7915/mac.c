@@ -1547,8 +1547,6 @@ mt7915_mac_parse_txs(struct mt7915_dev *dev, struct mt76_wcid *wcid,
 	info->status.ampdu_ack_len = !!(info->flags &
 					IEEE80211_TX_STAT_ACK);
 
-	info->status.rates[0].idx = -1;
-
 	txrate = FIELD_GET(MT_TXS0_TX_RATE, txs);
 
 	rate->mcs = FIELD_GET(MT_TX_RATE_IDX, txrate);
@@ -1581,6 +1579,7 @@ mt7915_mac_parse_txs(struct mt7915_dev *dev, struct mt76_wcid *wcid,
 
 		rate->mcs = mt76_get_rate(mphy->dev, sband, rate->mcs, cck);
 		rate->legacy = sband->bitrates[rate->mcs].bitrate;
+		info->status.rates[0].idx = rate->mcs;
 		break;
 	case MT_PHY_TYPE_HT:
 	case MT_PHY_TYPE_HT_GF:
@@ -1591,6 +1590,8 @@ mt7915_mac_parse_txs(struct mt7915_dev *dev, struct mt76_wcid *wcid,
 		rate->flags = RATE_INFO_FLAGS_MCS;
 		if (wcid->rate_short_gi)
 			rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
+		info->status.rates[0].idx = rate->mcs + rate->nss * 8;
+		info->status.rates[0].flags |= IEEE80211_TX_RC_MCS;
 		break;
 	case MT_PHY_TYPE_VHT:
 		if (rate->mcs > 9)
@@ -1599,6 +1600,8 @@ mt7915_mac_parse_txs(struct mt7915_dev *dev, struct mt76_wcid *wcid,
 		rate->flags = RATE_INFO_FLAGS_VHT_MCS;
 		if (wcid->rate_short_gi)
 			rate->flags |= RATE_INFO_FLAGS_SHORT_GI;
+		info->status.rates[0].idx = (rate->nss << 4) | rate->mcs;
+		info->status.rates[0].flags |= IEEE80211_TX_RC_VHT_MCS;
 		break;
 	case MT_PHY_TYPE_HE_SU:
 	case MT_PHY_TYPE_HE_EXT_SU:
@@ -1610,6 +1613,7 @@ mt7915_mac_parse_txs(struct mt7915_dev *dev, struct mt76_wcid *wcid,
 		rate->he_gi = wcid->rate_he_gi;
 		rate->he_dcm = FIELD_GET(MT_TX_RATE_DCM, txrate);
 		rate->flags = RATE_INFO_FLAGS_HE_MCS;
+		info->status.rates[0].idx = (rate->nss << 4) | rate->mcs;
 		break;
 	default:
 		WARN_ON_ONCE(true);
