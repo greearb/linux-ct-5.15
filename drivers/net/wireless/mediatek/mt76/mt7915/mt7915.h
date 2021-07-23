@@ -147,6 +147,7 @@ struct mib_stats {
 
 	u32 tx_rwp_fail_cnt;
 	u32 tx_rwp_need_cnt;
+	u32 tx_amsdu_pack_stats[8]; /* histogram of how many sub-frames in amsdu */
 
 	/* rx stats */
 	u32 rx_fifo_full_cnt;
@@ -162,8 +163,6 @@ struct mib_stats {
 	u32 rx_pfdrop_cnt;
 	u32 rx_vec_queue_overflow_drop_cnt;
 	u32 rx_ba_cnt;
-
-	u32 amsdu_pack_stats[8]; /* histogram of how many sub-frames in amsdu */
 };
 
 struct mt7915_hif {
