@@ -1123,6 +1123,27 @@ static const char mt7915_gstrings_stats[][ETH_GSTRING_LEN] = {
 	"v_tx_mcs_9",
 	"v_tx_mcs_10",
 	"v_tx_mcs_11",
+
+	/* per-vif rx counters */
+	"v_rx_nss1",
+	"v_rx_nss2",
+	"v_rx_nss3",
+	"v_rx_nss4",
+	"v_rx_mode_cck",
+	"v_rx_mode_ofdm",
+	"v_rx_mode_ht",
+	"v_rx_mode_ht_gf",
+	"v_rx_mode_vht",
+	"v_rx_mode_he_su",
+	"v_rx_mode_he_ext_su",
+	"v_rx_mode_he_tb",
+	"v_rx_mode_he_mu",
+	"v_rx_bw_20",
+	"v_rx_bw_40",
+	"v_rx_bw_80",
+	"v_rx_bw_160",
+	"v_rx_bw_he_ru",
+	"v_rx_ru_106",
 };
 
 #define MT7915_SSTATS_LEN ARRAY_SIZE(mt7915_gstrings_stats)
@@ -1189,6 +1210,27 @@ static void mt7915_ethtool_worker(void *wi_data, struct ieee80211_sta *sta)
 
 	for (q = 0; q < 12; q++)
 		data[ei++] += mstats->tx_mcs[q];
+
+	/* rx stats */
+	for (q = 0; q < ARRAY_SIZE(mstats->rx_nss); q++)
+		data[ei++] += mstats->rx_nss[q];
+
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_CCK];
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_OFDM];
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_HT];
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_HT_GF];
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_VHT];
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_HE_SU];
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_HE_EXT_SU];
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_HE_TB];
+	data[ei++] += mstats->rx_mode[MT_PHY_TYPE_HE_MU];
+
+	data[ei++] += mstats->rx_bw_20;
+	data[ei++] += mstats->rx_bw_40;
+	data[ei++] += mstats->rx_bw_80;
+	data[ei++] += mstats->rx_bw_160;
+	data[ei++] += mstats->rx_bw_he_ru;
+	data[ei++] += mstats->rx_ru_106;
 
 	wi->worker_stat_count = ei - wi->initial_stat_idx;
 }
