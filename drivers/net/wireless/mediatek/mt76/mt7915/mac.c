@@ -424,6 +424,7 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb)
 	u8 qos_ctl = 0;
 	__le16 fc = 0;
 	int i, idx;
+	struct mt7915_sta_stats *mstats = NULL;
 
 	memset(status, 0, sizeof(*status));
 
@@ -451,6 +452,7 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb)
 		struct mt7915_sta *msta;
 
 		msta = container_of(status->wcid, struct mt7915_sta, wcid);
+		mstats = &msta->stats;
 		spin_lock_bh(&dev->sta_poll_lock);
 		if (list_empty(&msta->poll_list))
 			list_add_tail(&msta->poll_list, &dev->sta_poll_list);
@@ -654,8 +656,19 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb)
 				WARN_ON_ONCE(nss > 4);
 			}
 
+			if (mstats) {
+				if (nss > 3)
+					mstats->rx_nss[3]++;
+				else
+					mstats->rx_nss[nss - 1]++;
+
+				mstats->rx_mode[mode]++;
+			}
+
 			switch (FIELD_GET(MT_CRXV_FRAME_MODE, v2)) {
 			case IEEE80211_STA_RX_BW_20:
+				if (mstats)
+					mstats->rx_bw_20++;
 				break;
 			case IEEE80211_STA_RX_BW_40:
 				if (mode & MT_PHY_TYPE_HE_EXT_SU &&
@@ -663,14 +676,24 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb)
 					status->bw = RATE_INFO_BW_HE_RU;
 					status->he_ru =
 						NL80211_RATE_INFO_HE_RU_ALLOC_106;
+					if (mstats) {
+						mstats->rx_bw_he_ru++;
+						mstats->rx_ru_106++;
+					}
 				} else {
 					status->bw = RATE_INFO_BW_40;
+					if (mstats)
+						mstats->rx_bw_40++;
 				}
 				break;
 			case IEEE80211_STA_RX_BW_80:
 				status->bw = RATE_INFO_BW_80;
+				if (mstats)
+					mstats->rx_bw_80++;
 				break;
 			case IEEE80211_STA_RX_BW_160:
+				if (mstats)
+					mstats->rx_bw_160++;
 				status->bw = RATE_INFO_BW_160;
 				break;
 			default:
