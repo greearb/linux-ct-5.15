@@ -96,6 +96,8 @@ struct mt7915_sta {
 	struct mt7915_sta_stats stats;
 
 	struct mt7915_sta_key_conf bip;
+
+	struct mt76_testmode_data test;
 };
 
 struct mt7915_vif {
