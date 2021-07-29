@@ -546,8 +546,119 @@ mt7915_pse_q_nonempty_stat_read_phy(struct mt7915_phy *phy,
 	struct mt7915_dev *dev = file->private;
 	u32 pse_stat;
 	int i;
+	u32 pg_flow_ctrl[22] = {0};
+	u32 fpg_cnt, ffa_cnt, fpg_head, fpg_tail;
+	u32 max_q, min_q, rsv_pg, used_pg;
+	u32 pse_buf_ctrl, pg_sz, pg_num;
+
 
 	pse_stat = mt76_rr(dev, WF_PSE_TOP_QUEUE_EMPTY_ADDR);
+
+	pse_buf_ctrl = mt76_rr(dev, WF_PSE_TOP_PBUF_CTRL_ADDR);
+	pg_flow_ctrl[0] = mt76_rr(dev, WF_PSE_TOP_FREEPG_CNT_ADDR);
+	pg_flow_ctrl[1] = mt76_rr(dev, WF_PSE_TOP_FREEPG_HEAD_TAIL_ADDR);
+	pg_flow_ctrl[2] = mt76_rr(dev, WF_PSE_TOP_PG_HIF0_GROUP_ADDR);
+	pg_flow_ctrl[3] = mt76_rr(dev, WF_PSE_TOP_HIF0_PG_INFO_ADDR);
+	pg_flow_ctrl[4] = mt76_rr(dev, WF_PSE_TOP_PG_HIF1_GROUP_ADDR);
+	pg_flow_ctrl[5] = mt76_rr(dev, WF_PSE_TOP_HIF1_PG_INFO_ADDR);
+	pg_flow_ctrl[6] = mt76_rr(dev, WF_PSE_TOP_PG_CPU_GROUP_ADDR);
+	pg_flow_ctrl[7] = mt76_rr(dev, WF_PSE_TOP_CPU_PG_INFO_ADDR);
+	pg_flow_ctrl[8] = mt76_rr(dev, WF_PSE_TOP_PG_LMAC0_GROUP_ADDR);
+	pg_flow_ctrl[9] = mt76_rr(dev, WF_PSE_TOP_LMAC0_PG_INFO_ADDR);
+	pg_flow_ctrl[10] = mt76_rr(dev, WF_PSE_TOP_PG_LMAC1_GROUP_ADDR);
+	pg_flow_ctrl[11] = mt76_rr(dev, WF_PSE_TOP_LMAC1_PG_INFO_ADDR);
+	pg_flow_ctrl[12] = mt76_rr(dev, WF_PSE_TOP_PG_LMAC2_GROUP_ADDR);
+	pg_flow_ctrl[13] = mt76_rr(dev, WF_PSE_TOP_LMAC2_PG_INFO_ADDR);
+	pg_flow_ctrl[14] = mt76_rr(dev, WF_PSE_TOP_PG_PLE_GROUP_ADDR);
+	pg_flow_ctrl[15] = mt76_rr(dev, WF_PSE_TOP_PLE_PG_INFO_ADDR);
+	pg_flow_ctrl[16] = mt76_rr(dev, WF_PSE_TOP_PG_LMAC3_GROUP_ADDR);
+	pg_flow_ctrl[17] = mt76_rr(dev, WF_PSE_TOP_LMAC3_PG_INFO_ADDR);
+	pg_flow_ctrl[18] = mt76_rr(dev, WF_PSE_TOP_PG_MDP_GROUP_ADDR);
+	pg_flow_ctrl[19] = mt76_rr(dev, WF_PSE_TOP_MDP_PG_INFO_ADDR);
+	pg_flow_ctrl[20] = mt76_rr(dev, WF_PSE_TOP_PG_PLE1_GROUP_ADDR);
+	pg_flow_ctrl[21] = mt76_rr(dev, WF_PSE_TOP_PLE1_PG_INFO_ADDR);
+
+	seq_puts(file, "PSE Configuration Info:\n");
+	seq_printf(file, "\tPacket Buffer Control: 0x%08x\n", pse_buf_ctrl);
+
+	pg_sz = (pse_buf_ctrl & WF_PSE_TOP_PBUF_CTRL_PAGE_SIZE_CFG_MASK)
+		>> WF_PSE_TOP_PBUF_CTRL_PAGE_SIZE_CFG_SHFT;
+	seq_printf(file, "\t\tPage Size:   %d(%d bytes per page)\n",
+		   pg_sz, (pg_sz == 1 ? 256 : 128));
+	seq_printf(file, "\t\tPage Offset: %d(in unit of 64KB)\n",
+		   (pse_buf_ctrl & WF_PSE_TOP_PBUF_CTRL_PBUF_OFFSET_MASK)
+		   >> WF_PSE_TOP_PBUF_CTRL_PBUF_OFFSET_SHFT);
+	pg_num = (pse_buf_ctrl & WF_PSE_TOP_PBUF_CTRL_TOTAL_PAGE_NUM_MASK)
+		>> WF_PSE_TOP_PBUF_CTRL_TOTAL_PAGE_NUM_SHFT;
+	seq_printf(file, "\t\tTotal page numbers: %d pages\n", pg_num);
+
+	/* Page Flow Control */
+	seq_puts(file, "PSE Page Flow Control:\n");
+	seq_printf(file, "\tFree page counter: 0x%08x\n", pg_flow_ctrl[0]);
+	fpg_cnt = (pg_flow_ctrl[0] & WF_PSE_TOP_FREEPG_CNT_FREEPG_CNT_MASK)
+		>> WF_PSE_TOP_FREEPG_CNT_FREEPG_CNT_SHFT;
+	seq_printf(file, "\t\tThe toal page number of free: 0x%03x\n", fpg_cnt);
+	ffa_cnt = (pg_flow_ctrl[0] & WF_PSE_TOP_FREEPG_CNT_FFA_CNT_MASK)
+		>> WF_PSE_TOP_FREEPG_CNT_FFA_CNT_SHFT;
+	seq_printf(file, "\t\tThe free page numbers of free for all: 0x%03x\n",
+		   ffa_cnt);
+	seq_printf(file, "\tFree page head and tail: 0x%08x\n", pg_flow_ctrl[1]);
+	fpg_head = (pg_flow_ctrl[1] & WF_PSE_TOP_FREEPG_HEAD_TAIL_FREEPG_HEAD_MASK)
+		>> WF_PSE_TOP_FREEPG_HEAD_TAIL_FREEPG_HEAD_SHFT;
+	fpg_tail = (pg_flow_ctrl[1] & WF_PSE_TOP_FREEPG_HEAD_TAIL_FREEPG_TAIL_MASK)
+		>> WF_PSE_TOP_FREEPG_HEAD_TAIL_FREEPG_TAIL_SHFT;
+	seq_printf(file, "\t\tThe tail/head page of free page list: 0x%03x/0x%03x\n",
+		   fpg_tail, fpg_head);
+
+#define MT7915_MMQ(idx, type, text)					\
+	do {                                                            \
+		int i2 = (idx);						\
+									\
+		min_q = (pg_flow_ctrl[i2] & type##_MIN_QUOTA_MASK)	\
+			>> type##_MIN_QUOTA_SHFT;                       \
+		max_q = (pg_flow_ctrl[i2] & type##_MAX_QUOTA_MASK)	\
+			>> type##_MAX_QUOTA_SHFT;                       \
+		seq_printf(file, "\t\t%s: %d/%d\n",			\
+			   text, max_q, min_q);				\
+	} while (false)
+
+#define MT7915_RSQ(idx, type, text)					\
+	do {                                                            \
+		int i3 = (idx);						\
+									\
+		rsv_pg = (pg_flow_ctrl[i3] & type##_RSV_CNT_MASK)	\
+			>> type##_RSV_CNT_SHFT;                         \
+		used_pg = (pg_flow_ctrl[i3] & type##_SRC_CNT_MASK)	\
+			>> type##_SRC_CNT_SHFT;                         \
+		seq_printf(file, "\t\t%s: %d/%d\n",			\
+			   text, used_pg, rsv_pg);			\
+	} while (false)
+
+#define MT7915_MMQ_RSQ(idx, type)					\
+	do {                                                            \
+		int i4 = (idx);						\
+									\
+		seq_printf(file, "\tReserved page counter of "          \
+			   #type " group: 0x%08x\n",			\
+			   pg_flow_ctrl[i4]);				\
+		seq_printf(file, "\t" #type " group page status: 0x%08x\n", \
+			   pg_flow_ctrl[i4 + 1]);			\
+		MT7915_MMQ(i4, WF_PSE_TOP_PG_##type##_GROUP_##type,	\
+			   "The max/min quota pages of " #type " group"); \
+		MT7915_RSQ(i4 + 1, WF_PSE_TOP_##type##_PG_INFO_##type, \
+			   "The used/reserved pages of " #type " group"); \
+	} while (false)
+
+	MT7915_MMQ_RSQ(2, HIF0);
+	MT7915_MMQ_RSQ(4, HIF1);
+	MT7915_MMQ_RSQ(6, CPU);
+	MT7915_MMQ_RSQ(8, LMAC0);
+	MT7915_MMQ_RSQ(10, LMAC1);
+	MT7915_MMQ_RSQ(12, LMAC2);
+	MT7915_MMQ_RSQ(16, LMAC3);
+	MT7915_MMQ_RSQ(14, PLE);
+	MT7915_MMQ_RSQ(20, PLE1);
+	MT7915_MMQ_RSQ(18, MDP);
 
 	/* Queue Empty Status */
 	seq_puts(file, "PSE Queue Empty Status:\n");
