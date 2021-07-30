@@ -507,6 +507,146 @@ mt7915_tx_stats_show(struct seq_file *file, void *data)
 
 DEFINE_SHOW_ATTRIBUTE(mt7915_tx_stats);
 
+struct mt7915_empty_q_info {
+	const char *qname;
+	u32 port_id;
+	u32 q_id;
+};
+
+static struct mt7915_empty_q_info pse_queue_empty_info[] = {
+	{"CPU Q0",  ENUM_UMAC_CPU_PORT_1,     ENUM_UMAC_CTX_Q_0},
+	{"CPU Q1",  ENUM_UMAC_CPU_PORT_1,     ENUM_UMAC_CTX_Q_1},
+	{"CPU Q2",  ENUM_UMAC_CPU_PORT_1,     ENUM_UMAC_CTX_Q_2},
+	{"CPU Q3",  ENUM_UMAC_CPU_PORT_1,     ENUM_UMAC_CTX_Q_3},
+	{NULL, 0, 0}, {NULL, 0, 0}, {NULL, 0, 0}, {NULL, 0, 0}, /* 4~7 not defined */
+	{"HIF Q0", ENUM_UMAC_HIF_PORT_0,    0}, /* Q8 */
+	{"HIF Q1", ENUM_UMAC_HIF_PORT_0,    1},
+	{"HIF Q2", ENUM_UMAC_HIF_PORT_0,    2},
+	{"HIF Q3", ENUM_UMAC_HIF_PORT_0,    3},
+	{"HIF Q4", ENUM_UMAC_HIF_PORT_0,    4},
+	{"HIF Q5", ENUM_UMAC_HIF_PORT_0,    5},
+	{NULL, 0, 0}, {NULL, 0, 0},  /* 14~15 not defined */
+	{"LMAC Q",  ENUM_UMAC_LMAC_PORT_2,    0},
+	{"MDP TX Q", ENUM_UMAC_LMAC_PORT_2, 1},
+	{"MDP RX Q", ENUM_UMAC_LMAC_PORT_2, 2},
+	{"SEC TX Q", ENUM_UMAC_LMAC_PORT_2, 3},
+	{"SEC RX Q", ENUM_UMAC_LMAC_PORT_2, 4},
+	{"SFD_PARK Q", ENUM_UMAC_LMAC_PORT_2, 5},
+	{"MDP_TXIOC Q", ENUM_UMAC_LMAC_PORT_2, 6},
+	{"MDP_RXIOC Q", ENUM_UMAC_LMAC_PORT_2, 7},
+	{NULL, 0, 0}, {NULL, 0, 0}, {NULL, 0, 0}, {NULL, 0, 0},
+	{NULL, 0, 0}, {NULL, 0, 0}, {NULL, 0, 0}, /* 24~30 not defined */
+	{"RLS Q",  ENUM_PLE_CTRL_PSE_PORT_3, ENUM_UMAC_PLE_CTRL_P3_Q_0X1F}
+};
+
+static void
+mt7915_pse_q_nonempty_stat_read_phy(struct mt7915_phy *phy,
+				    struct seq_file *file)
+{
+	struct mt7915_dev *dev = file->private;
+	u32 pse_stat;
+	int i;
+
+	pse_stat = mt76_rr(dev, WF_PSE_TOP_QUEUE_EMPTY_ADDR);
+
+	/* Queue Empty Status */
+	seq_puts(file, "PSE Queue Empty Status:\n");
+	seq_printf(file, "\tQUEUE_EMPTY: 0x%08x\n", pse_stat);
+	seq_printf(file, "\t\tCPU Q0/1/2/3 empty=%d/%d/%d/%d\n",
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_CPU_Q0_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_CPU_Q0_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_CPU_Q1_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_CPU_Q1_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_CPU_Q2_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_CPU_Q2_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_CPU_Q3_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_CPU_Q3_EMPTY_SHFT));
+	seq_printf(file, "\t\tHIF Q0/1/2/3/4/5 empty=%d/%d/%d/%d/%d/%d\n",
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_HIF_0_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_HIF_0_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_HIF_1_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_HIF_1_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_HIF_2_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_HIF_2_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_HIF_3_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_HIF_3_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_HIF_4_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_HIF_4_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_HIF_5_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_HIF_5_EMPTY_SHFT));
+	seq_printf(file, "\t\tLMAC TX Q empty=%d\n",
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_LMAC_TX_QUEUE_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_LMAC_TX_QUEUE_EMPTY_SHFT));
+	seq_printf(file, "\t\tMDP TX Q/RX Q empty=%d/%d\n",
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_MDP_TX_QUEUE_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_MDP_TX_QUEUE_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_MDP_RX_QUEUE_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_MDP_RX_QUEUE_EMPTY_SHFT));
+	seq_printf(file, "\t\tSEC TX Q/RX Q empty=%d/%d\n",
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_SEC_TX_QUEUE_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_SEC_TX_QUEUE_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_SEC_RX_QUEUE_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_SEC_RX_QUEUE_EMPTY_SHFT));
+	seq_printf(file, "\t\tSFD PARK Q empty=%d\n",
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_SFD_PARK_QUEUE_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_SFD_PARK_QUEUE_EMPTY_SHFT));
+	seq_printf(file, "\t\tMDP TXIOC Q/RXIOC Q empty=%d/%d\n",
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_MDP_TXIOC_QUEUE_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_MDP_TXIOC_QUEUE_EMPTY_SHFT),
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_MDP_RXIOC_QUEUE_EMPTY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_MDP_RXIOC_QUEUE_EMPTY_SHFT));
+	seq_printf(file, "\t\tRLS Q empty=%d\n",
+		   ((pse_stat & WF_PSE_TOP_QUEUE_EMPTY_RLS_Q_EMTPY_MASK)
+		    >> WF_PSE_TOP_QUEUE_EMPTY_RLS_Q_EMTPY_SHFT));
+	seq_printf(file,  ("Non-Empty Q info:\n"));
+
+	for (i = 0; i < 31; i++) {
+		if (((pse_stat & (0x1 << i)) >> i) == 0) {
+			u32 hfid, tfid, pktcnt, fl_que_ctrl[3] = {0};
+
+			if (pse_queue_empty_info[i].qname) {
+				seq_printf(file,  "\t%s: ", pse_queue_empty_info[i].qname);
+				fl_que_ctrl[0] |= WF_PSE_TOP_FL_QUE_CTRL_0_EXECUTE_MASK;
+				fl_que_ctrl[0] |= (pse_queue_empty_info[i].port_id
+						   << WF_PSE_TOP_FL_QUE_CTRL_0_Q_BUF_PID_SHFT);
+				fl_que_ctrl[0] |= (pse_queue_empty_info[i].q_id
+						   << WF_PSE_TOP_FL_QUE_CTRL_0_Q_BUF_QID_SHFT);
+			} else {
+				continue;
+			}
+
+			/*  Executes frame link and queue structure buffer read command */
+			fl_que_ctrl[0] |= (0x1 << 31);
+			mt76_wr(dev, WF_PSE_TOP_FL_QUE_CTRL_0_ADDR, fl_que_ctrl[0]);
+
+			fl_que_ctrl[1] = mt76_rr(dev, WF_PSE_TOP_FL_QUE_CTRL_2_ADDR);
+			fl_que_ctrl[2] = mt76_rr(dev, WF_PSE_TOP_FL_QUE_CTRL_3_ADDR);
+			hfid = (fl_que_ctrl[1] & WF_PSE_TOP_FL_QUE_CTRL_2_QUEUE_HEAD_FID_MASK)
+				>> WF_PSE_TOP_FL_QUE_CTRL_2_QUEUE_HEAD_FID_SHFT;
+			tfid = (fl_que_ctrl[1] & WF_PSE_TOP_FL_QUE_CTRL_2_QUEUE_TAIL_FID_MASK)
+				>> WF_PSE_TOP_FL_QUE_CTRL_2_QUEUE_TAIL_FID_SHFT;
+			pktcnt = (fl_que_ctrl[2] & WF_PSE_TOP_FL_QUE_CTRL_3_QUEUE_PKT_NUM_MASK)
+				>> WF_PSE_TOP_FL_QUE_CTRL_3_QUEUE_PKT_NUM_SHFT;
+			seq_printf(file, "tail/head fid = 0x%03x/0x%03x, pkt cnt = 0x%03x\n",
+				   tfid, hfid, pktcnt);
+		}
+	}
+}
+
+static int
+mt7915_rx_pse_stats_show(struct seq_file *file, void *data)
+{
+	struct mt7915_dev *dev = file->private;
+
+	seq_puts(file, "RX PSE Stats\n");
+
+	mt7915_pse_q_nonempty_stat_read_phy(&dev->phy, file);
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(mt7915_rx_pse_stats);
+
 static int
 mt7915_queues_acq(struct seq_file *s, void *data)
 {
@@ -622,6 +762,7 @@ int mt7915_init_debugfs(struct mt7915_dev *dev)
 	debugfs_create_devm_seqfile(dev->mt76.dev, "acq", dir,
 				    mt7915_queues_acq);
 	debugfs_create_file("tx_stats", 0400, dir, dev, &mt7915_tx_stats_fops);
+	debugfs_create_file("rx_pse_stats", 0400, dir, dev, &mt7915_rx_pse_stats_fops);
 	debugfs_create_file("fw_debug", 0600, dir, dev, &fops_fw_debug);
 	debugfs_create_file("force_txs", 0600, dir, dev, &fops_txs_for_no_skb);
 	debugfs_create_file("rx_group_5_enable", 0600, dir, dev, &fops_rx_group_5_enable);
