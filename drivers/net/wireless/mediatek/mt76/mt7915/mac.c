@@ -2145,7 +2145,7 @@ mt7915_mac_update_stats(struct mt7915_phy *phy)
 	struct mt7915_dev *dev = phy->dev;
 	struct mib_stats *mib = &phy->mib;
 	bool ext_phy = phy != &dev->phy;
-	int i, aggr0, aggr1, cnt;
+	int i, q, aggr0, aggr1, cnt;
 
 	mib->fcs_err_cnt += mt76_get_field(dev, MT_MIB_SDR3(ext_phy),
 					   MT_MIB_SDR3_FCS_ERR_MASK);
@@ -2218,6 +2218,26 @@ mt7915_mac_update_stats(struct mt7915_phy *phy)
 	cnt = mt76_rr(dev, MT_MIB_SDR34(ext_phy));
 	mib->tx_bf_cnt += FIELD_GET(MT_MIB_MU_BF_TX_CNT, cnt);
 
+	cnt = mt76_rr(dev, MT_MIB_SDR38(ext_phy));
+	mib->tx_mgt_frame_cnt += FIELD_GET(MT_MIB_CTRL_TX_CNT, cnt);
+
+	cnt = mt76_rr(dev, MT_MIB_SDR39(ext_phy));
+	mib->tx_mgt_frame_retry_cnt += FIELD_GET(MT_MIB_MGT_RETRY_CNT, cnt);
+
+	cnt = mt76_rr(dev, MT_MIB_SDR40(ext_phy));
+	mib->tx_data_frame_retry_cnt += FIELD_GET(MT_MIB_DATA_RETRY_CNT, cnt);
+
+	cnt = mt76_rr(dev, MT_MIB_SDR42(ext_phy));
+	mib->rx_partial_beacon_cnt += FIELD_GET(MT_MIB_RX_PARTIAL_BEACON_BSSID0, cnt);
+	mib->rx_partial_beacon_cnt += FIELD_GET(MT_MIB_RX_PARTIAL_BEACON_BSSID1, cnt);
+
+	cnt = mt76_rr(dev, MT_MIB_SDR43(ext_phy));
+	mib->rx_partial_beacon_cnt += FIELD_GET(MT_MIB_RX_PARTIAL_BEACON_BSSID2, cnt);
+	mib->rx_partial_beacon_cnt += FIELD_GET(MT_MIB_RX_PARTIAL_BEACON_BSSID3, cnt);
+
+	cnt = mt76_rr(dev, MT_MIB_SDR46(ext_phy));
+	mib->rx_oppo_ps_rx_dis_drop_cnt += FIELD_GET(MT_MIB_OPPO_PS_RX_DIS_DROP_COUNT, cnt);
+
 	cnt = mt76_rr(dev, MT_MIB_DR8(ext_phy));
 	mib->tx_mu_mpdu_cnt += cnt;
 
@@ -2272,6 +2292,29 @@ mt7915_mac_update_stats(struct mt7915_phy *phy)
 	/* Tx amsdu info (pack-count histogram) */
 	for (i = 0; i < ARRAY_SIZE(mib->tx_amsdu_pack_stats); i++)
 		mib->tx_amsdu_pack_stats[i] += mt76_rr(dev,  MT_PLE_AMSDU_PACK_MSDU_CNT(i));
+
+	cnt = mt76_rr(dev, MT_MIB_M0DROPSR00(ext_phy));
+	mib->tx_drop_rts_retry_fail_cnt += FIELD_GET(MT_MIB_RTS_RETRY_FAIL_DROP_MASK, cnt);
+	mib->tx_drop_mpdu_retry_fail_cnt += FIELD_GET(MT_MIB_RTS_RETRY_FAIL_DROP_MASK, cnt);
+
+	cnt = mt76_rr(dev, MT_MIB_M0DROPSR01(ext_phy));
+	mib->tx_drop_lto_limit_fail_cnt += FIELD_GET(MT_MIB_LTO_FAIL_DROP_MASK, cnt);
+
+	cnt = mt76_rr(dev, MT_MIB_SDR50(ext_phy));
+	mib->tx_dbnss_cnt += FIELD_GET(MT_MIB_DBNSS_CNT_DROP_MASK, cnt);
+
+	cnt = mt76_rr(dev, MT_MIB_SDR51(ext_phy));
+	mib->rx_fcs_ok_cnt += FIELD_GET(MT_MIB_RX_FCS_OK_MASK, cnt);
+
+	for (i = 0; i < 2; i++) {
+		for (q = 0; q < 10; q++) {
+			cnt = mt76_rr(dev, MT_MIB_VHT_RX_FCS_HISTOGRAM(ext_phy, i, q));
+			mib->rx_mu_fcs_ok_hist[i][q] +=
+				FIELD_GET(MT_MIB_VHT_RX_FCS_HIST_OK_MASK, cnt);
+			mib->rx_mu_fcs_err_hist[i][q] +=
+				FIELD_GET(MT_MIB_VHT_RX_FCS_HIST_ERR_MASK, cnt);
+		}
+	}
 
 }
 
