@@ -1081,6 +1081,13 @@ static const char mt7915_gstrings_stats[][ETH_GSTRING_LEN] = {
 	"tx_msdu_pack_6",
 	"tx_msdu_pack_7",
 	"tx_msdu_pack_8",
+	"tx_mgt_frame", /* SDR38, management frame tx counter */
+	"tx_mgt_frame_retry", /* SDR39, management frame retried counter */
+	"tx_data_frame_retry", /* SDR40, data frame retried counter */
+	"tx_drop_rts_retry_fail", /* TX Drop, RTS retries exhausted */
+	"tx_drop_mpdu_retry_fail", /* TX Drop, MPDU retries exhausted */
+	"tx_drop_lto_limit_fail", /* TX drop, Life Time Out limit reached. */
+	"tx_dbnss", /* pkts TX using double number of spatial streams */
 
 	/* rx counters */
 	"rx_fifo_full_cnt",
@@ -1097,6 +1104,54 @@ static const char mt7915_gstrings_stats[][ETH_GSTRING_LEN] = {
 	"rx_pfdrop_cnt",
 	"rx_vec_queue_overflow_drop_cnt",
 	"rx_ba_cnt",
+	"rx_partial_beacon",
+	"rx_oppo_ps_rx_dis_drop",
+	"rx_fcs_ok",
+
+	/* rx MU VHT histogram */
+	"rx_mu_fcs_ok_nss1_mcs0",
+	"rx_mu_fcs_ok_nss1_mcs1",
+	"rx_mu_fcs_ok_nss1_mcs2",
+	"rx_mu_fcs_ok_nss1_mcs3",
+	"rx_mu_fcs_ok_nss1_mcs4",
+	"rx_mu_fcs_ok_nss1_mcs5",
+	"rx_mu_fcs_ok_nss1_mcs6",
+	"rx_mu_fcs_ok_nss1_mcs7",
+	"rx_mu_fcs_ok_nss1_mcs8",
+	"rx_mu_fcs_ok_nss1_mcs9",
+
+	"rx_mu_fcs_ok_nss2_mcs0",
+	"rx_mu_fcs_ok_nss2_mcs1",
+	"rx_mu_fcs_ok_nss2_mcs2",
+	"rx_mu_fcs_ok_nss2_mcs3",
+	"rx_mu_fcs_ok_nss2_mcs4",
+	"rx_mu_fcs_ok_nss2_mcs5",
+	"rx_mu_fcs_ok_nss2_mcs6",
+	"rx_mu_fcs_ok_nss2_mcs7",
+	"rx_mu_fcs_ok_nss2_mcs8",
+	"rx_mu_fcs_ok_nss2_mcs9",
+
+	"rx_mu_fcs_err_nss1_mcs0",
+	"rx_mu_fcs_err_nss1_mcs1",
+	"rx_mu_fcs_err_nss1_mcs2",
+	"rx_mu_fcs_err_nss1_mcs3",
+	"rx_mu_fcs_err_nss1_mcs4",
+	"rx_mu_fcs_err_nss1_mcs5",
+	"rx_mu_fcs_err_nss1_mcs6",
+	"rx_mu_fcs_err_nss1_mcs7",
+	"rx_mu_fcs_err_nss1_mcs8",
+	"rx_mu_fcs_err_nss1_mcs9",
+
+	"rx_mu_fcs_err_nss2_mcs0",
+	"rx_mu_fcs_err_nss2_mcs1",
+	"rx_mu_fcs_err_nss2_mcs2",
+	"rx_mu_fcs_err_nss2_mcs3",
+	"rx_mu_fcs_err_nss2_mcs4",
+	"rx_mu_fcs_err_nss2_mcs5",
+	"rx_mu_fcs_err_nss2_mcs6",
+	"rx_mu_fcs_err_nss2_mcs7",
+	"rx_mu_fcs_err_nss2_mcs8",
+	"rx_mu_fcs_err_nss2_mcs9",
 
 	/* driver rx counters */
 	"d_rx_skb",
@@ -1264,7 +1319,7 @@ void mt7915_get_et_stats(struct ieee80211_hw *hw,
 
 	/* See mt7915_ampdu_stat_read_phy, etc */
 	bool ext_phy = phy != &dev->phy;
-	int i, n;
+	int i, n, q;
 	int ei = 0;
 
 	if (!phy)
@@ -1322,6 +1377,14 @@ void mt7915_get_et_stats(struct ieee80211_hw *hw,
 	for (i = 0; i < 8; i++)
 		data[ei++] = mib->tx_amsdu_pack_stats[i];
 
+	data[ei++] = mib->tx_mgt_frame_cnt;
+	data[ei++] = mib->tx_mgt_frame_retry_cnt;
+	data[ei++] = mib->tx_data_frame_retry_cnt;
+	data[ei++] = mib->tx_drop_rts_retry_fail_cnt;
+	data[ei++] = mib->tx_drop_mpdu_retry_fail_cnt;
+	data[ei++] = mib->tx_drop_lto_limit_fail_cnt;
+	data[ei++] = mib->tx_dbnss_cnt;
+
 	/* rx counters */
 	data[ei++] = mib->rx_fifo_full_cnt; /* group-5 might exacerbate this */
 	data[ei++] = mib->rx_oor_cnt;
@@ -1337,6 +1400,18 @@ void mt7915_get_et_stats(struct ieee80211_hw *hw,
 	data[ei++] = mib->rx_pfdrop_cnt;
 	data[ei++] = mib->rx_vec_queue_overflow_drop_cnt;
 	data[ei++] = mib->rx_ba_cnt;
+	data[ei++] = mib->rx_partial_beacon_cnt;
+	data[ei++] = mib->rx_oppo_ps_rx_dis_drop_cnt;
+	data[ei++] = mib->rx_fcs_ok_cnt;
+
+	for (i = 0; i < 2; i++) { /* for each nss */
+		for (q = 0; q < 10; q++) /* for each mcs */
+			data[ei++] = mib->rx_mu_fcs_ok_hist[i][q];
+	}
+	for (i = 0; i < 2; i++) { /* for each nss */
+		for (q = 0; q < 10; q++) /* for each mcs */
+			data[ei++] = mib->rx_mu_fcs_err_hist[i][q];
+	}
 
 	/* rx stats from driver */
 	data[ei++] = mib->rx_d_skb;
