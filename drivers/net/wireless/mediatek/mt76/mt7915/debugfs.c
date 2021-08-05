@@ -836,7 +836,8 @@ mt7915_puts_rate_txpower(struct seq_file *s, struct mt7915_phy *phy)
 	if (!phy)
 		return;
 
-	seq_printf(s, "\nBand %d\n", phy != &phy->dev->phy);
+	seq_puts(s, "Per-chain txpower in 1/2 db units.\n");
+	seq_printf(s, "\nPhy %d\n", phy != &phy->dev->phy);
 
 	mt7915_mcu_get_txpower_sku(phy, txpower, sizeof(txpower));
 	for (i = 0, buf = txpower; i < ARRAY_SIZE(mt7915_sku_group_len); i++) {
