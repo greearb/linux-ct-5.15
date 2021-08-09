@@ -1808,6 +1808,9 @@ mt7915_mcu_sta_bfer_vht(struct ieee80211_sta *sta, struct mt7915_phy *phy,
 		if (sta->bandwidth == IEEE80211_STA_RX_BW_160)
 			bf->ibf_nrow = 1;
 	}
+
+	pr_info("sta-bfer-vht, sta->bw: %d  bf->nr: %d  bf->nc: %d  explicit: %d",
+		sta->bandwidth, bf->nr, bf->nc, explicit);
 }
 
 static void
@@ -1835,6 +1838,9 @@ mt7915_mcu_sta_bfer_he(struct ieee80211_sta *sta, struct ieee80211_vif *vif,
 	bf->nr = min_t(u8, bfer_nr, bfee_nr);
 	bf->nc = min_t(u8, nss_mcs, bf->nr);
 	bf->ibf_ncol = bf->nc;
+
+	pr_info("mcu-sta-bfer-he, sta->bw: %d  bf->nr: %d  bf->nc: %d trigger-su: %d  trigger-mu: %d\n",
+		sta->bandwidth, bf->nr, bf->nc, bf->trigger_su, bf->trigger_mu);
 
 	if (sta->bandwidth != IEEE80211_STA_RX_BW_160)
 		return;
@@ -1865,6 +1871,8 @@ mt7915_mcu_sta_bfer_he(struct ieee80211_sta *sta, struct ieee80211_vif *vif,
 			 pe->phy_cap_info[4]);
 
 	bf->nr_bw160 = min_t(int, bfer_nr, bfee_nr);
+
+	pr_info("nr_bw160: %d  nc_bw160: %d", bf->nr_bw160, bf->nc_bw160);
 }
 
 static void
@@ -1883,6 +1891,9 @@ mt7915_mcu_sta_bfer_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	};
 
 #define MT_BFER_FREE		cpu_to_le16(GENMASK(15, 0))
+
+	pr_info("mcu-sta-bfer-tlv, enable: %d  explicit: %d bw: %d\n",
+		enable, explicit, sta->bandwidth);
 
 	tlv = mt7915_mcu_add_tlv(skb, STA_REC_BF, sizeof(*bf));
 	bf = (struct sta_rec_bf *)tlv;
@@ -1971,6 +1982,9 @@ mt7915_mcu_add_txbf(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 	struct sk_buff *skb;
 	int r, len;
 	bool ebfee = 0, ebf = 0;
+
+	dev_info(dev->mt76.dev, "mcu-add-txbf, bw: %d has-he: %d  vht: %d",
+		 sta->bandwidth, sta->he_cap.has_he, sta->vht_cap.vht_supported);
 
 	if (vif->type != NL80211_IFTYPE_STATION &&
 	    vif->type != NL80211_IFTYPE_AP)
