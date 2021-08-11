@@ -1143,7 +1143,7 @@ int mt7915_mcu_add_key(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 static void
 mt7915_mcu_sta_ba_tlv(struct sk_buff *skb,
 		      struct ieee80211_ampdu_params *params,
-		      bool enable, bool tx)
+		      bool enable, bool tx, struct mt7915_sta *msta)
 {
 	struct sta_rec_ba *ba;
 	struct tlv *tlv;
@@ -1157,13 +1157,15 @@ mt7915_mcu_sta_ba_tlv(struct sk_buff *skb,
 	ba->ba_en = enable << params->tid;
 	ba->amsdu = params->amsdu;
 	ba->tid = params->tid;
+
+	memcpy(&msta->last_mcu.sta_rec_ba, ba, sizeof(*ba));
 }
 
 static void
 mt7915_mcu_wtbl_ba_tlv(struct sk_buff *skb,
 		       struct ieee80211_ampdu_params *params,
 		       bool enable, bool tx, void *sta_wtbl,
-		       void *wtbl_tlv)
+		       void *wtbl_tlv, struct mt7915_sta *msta)
 {
 	struct wtbl_ba *ba;
 	struct tlv *tlv;
@@ -1188,6 +1190,8 @@ mt7915_mcu_wtbl_ba_tlv(struct sk_buff *skb,
 
 	if (enable)
 		ba->ba_winsize = cpu_to_le16(params->buf_size);
+
+	memcpy(&msta->last_mcu.wtbl_ba, ba, sizeof(*ba));
 }
 
 static int
@@ -1217,7 +1221,8 @@ mt7915_mcu_sta_ba(struct mt7915_dev *dev,
 	if (IS_ERR(wtbl_hdr))
 		return PTR_ERR(wtbl_hdr);
 
-	mt7915_mcu_wtbl_ba_tlv(skb, params, enable, tx, sta_wtbl, wtbl_hdr);
+	mt7915_mcu_wtbl_ba_tlv(skb, params, enable, tx, sta_wtbl, wtbl_hdr,
+			       msta);
 
 	ret = mt76_mcu_skb_send_msg(&dev->mt76, skb,
 				    MCU_EXT_CMD(STA_REC_UPDATE), true);
@@ -1229,7 +1234,7 @@ mt7915_mcu_sta_ba(struct mt7915_dev *dev,
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
-	mt7915_mcu_sta_ba_tlv(skb, params, enable, tx);
+	mt7915_mcu_sta_ba_tlv(skb, params, enable, tx, msta);
 
 	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
 				     MCU_EXT_CMD(STA_REC_UPDATE), true);
@@ -1252,7 +1257,7 @@ int mt7915_mcu_add_rx_ba(struct mt7915_dev *dev,
 static void
 mt7915_mcu_wtbl_generic_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
 			    struct ieee80211_sta *sta, void *sta_wtbl,
-			    void *wtbl_tlv)
+			    void *wtbl_tlv, struct mt7915_sta *msta)
 {
 	struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
 	struct wtbl_generic *generic;
@@ -1287,11 +1292,14 @@ mt7915_mcu_wtbl_generic_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
 	rx->rca1 = sta ? vif->type != NL80211_IFTYPE_AP : 1;
 	rx->rca2 = 1;
 	rx->rv = 1;
+
+	memcpy(&msta->last_mcu.wtbl_rx, rx, sizeof(*rx));
 }
 
 static void
 mt7915_mcu_sta_basic_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
-			 struct ieee80211_sta *sta, bool enable)
+			 struct ieee80211_sta *sta, bool enable,
+			 struct mt7915_sta *msta)
 {
 #define EXTRA_INFO_VER          BIT(0)
 #define EXTRA_INFO_NEW          BIT(1)
@@ -1335,12 +1343,14 @@ mt7915_mcu_sta_basic_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
 	memcpy(basic->peer_addr, sta->addr, ETH_ALEN);
 	basic->aid = cpu_to_le16(sta->aid);
 	basic->qos = sta->wme;
+
+	memcpy(&msta->last_mcu.sta_rec_basic, basic, sizeof(*basic));
 }
 
 static void
-mt7915_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
+mt7915_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
+		      struct mt7915_sta *msta)
 {
-	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
 	struct ieee80211_sta_he_cap *he_cap = &sta->he_cap;
 	struct ieee80211_he_cap_elem *elem = &he_cap->he_cap_elem;
 	enum nl80211_band band = msta->vif->phy->mt76->chandef.chan->band;
@@ -1474,11 +1484,13 @@ mt7915_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
 		HE_PHY(CAP8_DCM_MAX_RU_MASK, elem->phy_cap_info[8]);
 
 	he->pkt_ext = 2;
+
+	memcpy(&msta->last_mcu.sta_rec_he, he, sizeof(*he));
 }
 
 static void
 mt7915_mcu_sta_uapsd_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
-			 struct ieee80211_vif *vif)
+			 struct ieee80211_vif *vif, struct mt7915_sta *msta)
 {
 	struct sta_rec_uapsd *uapsd;
 	struct tlv *tlv;
@@ -1506,10 +1518,13 @@ mt7915_mcu_sta_uapsd_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 		uapsd->tac_map |= BIT(0);
 	}
 	uapsd->max_sp = sta->max_sp;
+
+	memcpy(&msta->last_mcu.sta_rec_uapsd, uapsd, sizeof(*uapsd));
 }
 
 static void
-mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
+mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
+			struct ieee80211_vif *vif, struct mt7915_sta *msta)
 {
 	struct ieee80211_sta_he_cap *he_cap = &sta->he_cap;
 	struct ieee80211_he_cap_elem *elem = &he_cap->he_cap_elem;
@@ -1554,10 +1569,14 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
 		HE_PHY(CAP2_UL_MU_FULL_MU_MIMO, elem->phy_cap_info[2]);
 	muru->mimo_ul.partial_ul_mimo =
 		HE_PHY(CAP2_UL_MU_PARTIAL_MU_MIMO, elem->phy_cap_info[2]);
+
+	memcpy(&msta->last_mcu.sta_rec_muru, muru, sizeof(*muru));
 }
 
 static void
-mt7915_mcu_sta_vht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
+
+mt7915_mcu_sta_vht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
+		       struct mt7915_sta *msta)
 {
 	struct sta_rec_vht *vht;
 	struct tlv *tlv;
@@ -1568,12 +1587,14 @@ mt7915_mcu_sta_vht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
 	vht->vht_cap = cpu_to_le32(sta->vht_cap.cap);
 	vht->vht_rx_mcs_map = sta->vht_cap.vht_mcs.rx_mcs_map;
 	vht->vht_tx_mcs_map = sta->vht_cap.vht_mcs.tx_mcs_map;
+
+	memcpy(&msta->last_mcu.sta_rec_vht, vht, sizeof(*vht));
 }
 
 static void
-mt7915_mcu_sta_amsdu_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
+mt7915_mcu_sta_amsdu_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
+			 struct mt7915_sta *msta)
 {
-	struct mt7915_sta *msta = (struct mt7915_sta *)sta->drv_priv;
 	struct sta_rec_amsdu *amsdu;
 	struct tlv *tlv;
 
@@ -1603,7 +1624,8 @@ mt7915_hw_amsdu_supported(struct ieee80211_vif *vif)
 
 static void
 mt7915_mcu_sta_tlv(struct mt7915_dev *dev, struct sk_buff *skb,
-		   struct ieee80211_sta *sta, struct ieee80211_vif *vif)
+		   struct ieee80211_sta *sta, struct ieee80211_vif *vif,
+		   struct mt7915_sta *msta)
 {
 	struct tlv *tlv;
 
@@ -1616,15 +1638,15 @@ mt7915_mcu_sta_tlv(struct mt7915_dev *dev, struct sk_buff *skb,
 		ht->ht_cap = cpu_to_le16(sta->ht_cap.cap);
 
 		if (mt7915_hw_amsdu_supported(vif))
-			mt7915_mcu_sta_amsdu_tlv(skb, sta);
+			mt7915_mcu_sta_amsdu_tlv(skb, sta, msta);
 	}
 
 	/* starec he */
 	if (sta->he_cap.has_he)
-		mt7915_mcu_sta_he_tlv(skb, sta);
+		mt7915_mcu_sta_he_tlv(skb, sta, msta);
 
 	/* starec uapsd */
-	mt7915_mcu_sta_uapsd_tlv(skb, sta, vif);
+	mt7915_mcu_sta_uapsd_tlv(skb, sta, vif, msta);
 }
 
 static void
@@ -1643,8 +1665,9 @@ mt7915_mcu_wtbl_smps_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 }
 
 static void
-mt7915_mcu_wtbl_ht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
-		       void *sta_wtbl, void *wtbl_tlv)
+mt7915_mcu_wtbl_ht_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
+		       struct ieee80211_sta *sta, void *sta_wtbl,
+		       void *wtbl_tlv, struct mt7915_sta *msta)
 {
 	struct wtbl_ht *ht = NULL;
 	struct tlv *tlv;
@@ -1683,9 +1706,9 @@ mt7915_mcu_wtbl_ht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 static void
 mt7915_mcu_wtbl_hdr_trans_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
 			      struct ieee80211_sta *sta,
-			      void *sta_wtbl, void *wtbl_tlv)
+			      void *sta_wtbl, void *wtbl_tlv,
+			      struct mt7915_sta *msta)
 {
-	struct mt7915_sta *msta;
 	struct wtbl_hdr_trans *htr = NULL;
 	struct tlv *tlv;
 
@@ -1701,7 +1724,6 @@ mt7915_mcu_wtbl_hdr_trans_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
 	if (!sta)
 		return;
 
-	msta = (struct mt7915_sta *)sta->drv_priv;
 	htr->no_rx_trans = !test_bit(MT_WCID_FLAG_HDR_TRANS, &msta->wcid.flags);
 	if (test_bit(MT_WCID_FLAG_4ADDR, &msta->wcid.flags)) {
 		htr->to_ds = true;
@@ -1725,7 +1747,7 @@ int mt7915_mcu_sta_update_hdr_trans(struct mt7915_dev *dev,
 	if (IS_ERR(wtbl_hdr))
 		return PTR_ERR(wtbl_hdr);
 
-	mt7915_mcu_wtbl_hdr_trans_tlv(skb, vif, sta, NULL, wtbl_hdr);
+	mt7915_mcu_wtbl_hdr_trans_tlv(skb, vif, sta, NULL, wtbl_hdr, msta);
 
 	return mt76_mcu_skb_send_msg(&dev->mt76, skb, MCU_EXT_CMD(WTBL_UPDATE),
 				     true);
@@ -2207,7 +2229,7 @@ int mt7915_mcu_add_he(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
-	mt7915_mcu_sta_he_tlv(skb, sta);
+	mt7915_mcu_sta_he_tlv(skb, sta, msta);
 
 	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
 				     MCU_EXT_CMD(STA_REC_UPDATE), true);
@@ -2263,9 +2285,9 @@ mt7915_mcu_add_mu(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 	/* wait until TxBF and MU ready to update stare vht */
 
 	/* starec muru */
-	mt7915_mcu_sta_muru_tlv(skb, sta);
+	mt7915_mcu_sta_muru_tlv(skb, sta, vif, msta);
 	/* starec vht */
-	mt7915_mcu_sta_vht_tlv(skb, sta);
+	mt7915_mcu_sta_vht_tlv(skb, sta, msta);
 
 	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
 				     MCU_EXT_CMD(STA_REC_UPDATE), true);
@@ -2307,9 +2329,9 @@ int mt7915_mcu_add_sta(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
-	mt7915_mcu_sta_basic_tlv(skb, vif, sta, enable);
+	mt7915_mcu_sta_basic_tlv(skb, vif, sta, enable, msta);
 	if (enable && sta)
-		mt7915_mcu_sta_tlv(dev, skb, sta, vif);
+		mt7915_mcu_sta_tlv(dev, skb, sta, vif, msta);
 
 	sta_wtbl = mt7915_mcu_add_tlv(skb, STA_REC_WTBL, sizeof(struct tlv));
 
@@ -2319,10 +2341,13 @@ int mt7915_mcu_add_sta(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 		return PTR_ERR(wtbl_hdr);
 
 	if (enable) {
-		mt7915_mcu_wtbl_generic_tlv(skb, vif, sta, sta_wtbl, wtbl_hdr);
-		mt7915_mcu_wtbl_hdr_trans_tlv(skb, vif, sta, sta_wtbl, wtbl_hdr);
+		mt7915_mcu_wtbl_generic_tlv(skb, vif, sta, sta_wtbl, wtbl_hdr,
+					    msta);
+		mt7915_mcu_wtbl_hdr_trans_tlv(skb, vif, sta, sta_wtbl, wtbl_hdr,
+					      msta);
 		if (sta)
-			mt7915_mcu_wtbl_ht_tlv(skb, sta, sta_wtbl, wtbl_hdr);
+			mt7915_mcu_wtbl_ht_tlv(skb, vif, sta, sta_wtbl, wtbl_hdr,
+					       msta);
 	}
 
 	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
