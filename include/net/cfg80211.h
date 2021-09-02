@@ -2613,6 +2613,7 @@ struct cfg80211_auth_request {
  * @ASSOC_REQ_DISABLE_HE:  Disable HE
  * @ASSOC_REQ_DISABLE_TWT:  Disable TWT
  * @ASSOC_REQ_DISABLE_160:  Disable 160Mhz
+ * @ASSOC_REQ_DISABLE_OFDMA:  Disable OFDMA
  */
 enum cfg80211_assoc_req_flags {
 	ASSOC_REQ_DISABLE_HT			= BIT(0),
@@ -2622,6 +2623,7 @@ enum cfg80211_assoc_req_flags {
 	ASSOC_REQ_DISABLE_HE			= BIT(4),
 	ASSOC_REQ_DISABLE_TWT			= BIT(5),
 	ASSOC_REQ_DISABLE_160			= BIT(6),
+	ASSOC_REQ_DISABLE_OFDMA			= BIT(7),
 };
 
 /**
