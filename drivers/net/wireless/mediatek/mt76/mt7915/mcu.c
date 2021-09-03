@@ -1403,9 +1403,11 @@ mt7915_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	    IEEE80211_HE_PHY_CAP2_STBC_RX_UNDER_80MHZ)
 		cap |= STA_REC_HE_CAP_LE_EQ_80M_RX_STBC;
 
-	if (elem->phy_cap_info[6] &
-	    IEEE80211_HE_PHY_CAP6_PARTIAL_BW_EXT_RANGE)
-		cap |= STA_REC_HE_CAP_PARTIAL_BW_EXT_RANGE;
+	if (!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) {
+		if (elem->phy_cap_info[6] &
+		    IEEE80211_HE_PHY_CAP6_PARTIAL_BW_EXT_RANGE)
+			cap |= STA_REC_HE_CAP_PARTIAL_BW_EXT_RANGE;
+	}
 
 	if (elem->phy_cap_info[7] &
 	    IEEE80211_HE_PHY_CAP7_HE_SU_MU_PPDU_4XLTF_AND_08_US_GI)
@@ -1427,17 +1429,19 @@ mt7915_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	    IEEE80211_HE_PHY_CAP8_HE_ER_SU_1XLTF_AND_08_US_GI)
 		cap |= STA_REC_HE_CAP_ER_SU_PPDU_1LTF_8US_GI;
 
-	if (elem->phy_cap_info[9] &
-	    IEEE80211_HE_PHY_CAP9_NON_TRIGGERED_CQI_FEEDBACK)
-		cap |= STA_REC_HE_CAP_TRIG_CQI_FK;
+	if (!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) {
+		if (elem->phy_cap_info[9] &
+		    IEEE80211_HE_PHY_CAP9_NON_TRIGGERED_CQI_FEEDBACK)
+			cap |= STA_REC_HE_CAP_TRIG_CQI_FK;
 
-	if (elem->phy_cap_info[9] &
-	    IEEE80211_HE_PHY_CAP9_TX_1024_QAM_LESS_THAN_242_TONE_RU)
-		cap |= STA_REC_HE_CAP_TX_1024QAM_UNDER_RU242;
+		if (elem->phy_cap_info[9] &
+		    IEEE80211_HE_PHY_CAP9_TX_1024_QAM_LESS_THAN_242_TONE_RU)
+			cap |= STA_REC_HE_CAP_TX_1024QAM_UNDER_RU242;
 
-	if (elem->phy_cap_info[9] &
-	    IEEE80211_HE_PHY_CAP9_RX_1024_QAM_LESS_THAN_242_TONE_RU)
-		cap |= STA_REC_HE_CAP_RX_1024QAM_UNDER_RU242;
+		if (elem->phy_cap_info[9] &
+		    IEEE80211_HE_PHY_CAP9_RX_1024_QAM_LESS_THAN_242_TONE_RU)
+			cap |= STA_REC_HE_CAP_RX_1024QAM_UNDER_RU242;
+	}
 
 	he->he_cap = cpu_to_le32(cap);
 
@@ -1535,16 +1539,40 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 
 	muru = (struct sta_rec_muru *)tlv;
 
-	muru->cfg.mimo_dl_en = true;
 	muru->cfg.mimo_ul_en = true;
 
-	if ((!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) &&
-	    elem->phy_cap_info[6] & IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMING_FB) {
+	if (!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) {
 		pr_info("STA: %pM  sta-muru-tlv, enabling OFDMA", sta->addr);
 		muru->cfg.ofdma_dl_en = true;
 		/* mimo_ul_en not stable yet (Aug 9, 2021 */
 		/* muru->cfg.mimo_ul_en = true; */
 		muru->cfg.ofdma_ul_en = true;
+
+		muru->mimo_dl.partial_bw_dl_mimo =
+			HE_PHY(CAP6_PARTIAL_BANDWIDTH_DL_MUMIMO, elem->phy_cap_info[6]);
+		muru->mimo_ul.partial_ul_mimo =
+			HE_PHY(CAP2_UL_MU_PARTIAL_MU_MIMO, elem->phy_cap_info[2]);
+
+		muru->ofdma_dl.punc_pream_rx =
+			HE_PHY(CAP1_PREAMBLE_PUNC_RX_MASK, elem->phy_cap_info[1]);
+		muru->ofdma_dl.he_20m_in_40m_2g =
+			HE_PHY(CAP8_20MHZ_IN_40MHZ_HE_PPDU_IN_2G, elem->phy_cap_info[8]);
+		muru->ofdma_dl.he_20m_in_160m =
+			HE_PHY(CAP8_20MHZ_IN_160MHZ_HE_PPDU, elem->phy_cap_info[8]);
+		muru->ofdma_dl.he_80m_in_160m =
+			HE_PHY(CAP8_80MHZ_IN_160MHZ_HE_PPDU, elem->phy_cap_info[8]);
+		muru->ofdma_dl.lt16_sigb = 0;
+		muru->ofdma_dl.rx_su_comp_sigb = 0;
+		muru->ofdma_dl.rx_su_non_comp_sigb = 0;
+
+		muru->ofdma_ul.t_frame_dur =
+			HE_MAC(CAP1_TF_MAC_PAD_DUR_MASK, elem->mac_cap_info[1]);
+		muru->ofdma_ul.mu_cascading =
+			HE_MAC(CAP2_MU_CASCADING, elem->mac_cap_info[2]);
+		muru->ofdma_ul.uo_ra =
+			HE_MAC(CAP3_OFDMA_RA, elem->mac_cap_info[3]);
+		muru->ofdma_ul.he_2x996_tone = 0;
+		muru->ofdma_ul.rx_t_frame_11ac = 0;
 	}
 	else {
 		pr_info("STA: %pM  sta-muru-tlv, NOT enabling OFDMA", sta->addr);
@@ -1571,15 +1599,19 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	muru->ofdma_ul.he_2x996_tone = 0;
 	muru->ofdma_ul.rx_t_frame_11ac = 0;
 
+	/* A non-AP HE station must support MU beamformee */
+	if (vif->type == NL80211_IFTYPE_STATION && vif->bss_conf.he_support)
+		muru->cfg.mimo_dl_en = true;
+	else
+		muru->cfg.mimo_dl_en = mvif->cap.he_mu_ebfer ||
+				       mvif->cap.vht_mu_ebfer ||
+				       mvif->cap.vht_mu_ebfee;
+
 	muru->mimo_dl.vht_mu_bfee =
 		!!(sta->vht_cap.cap & IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE);
-	muru->mimo_dl.partial_bw_dl_mimo =
-		HE_PHY(CAP6_PARTIAL_BANDWIDTH_DL_MUMIMO, elem->phy_cap_info[6]);
 
 	muru->mimo_ul.full_ul_mimo =
 		HE_PHY(CAP2_UL_MU_FULL_MU_MIMO, elem->phy_cap_info[2]);
-	muru->mimo_ul.partial_ul_mimo =
-		HE_PHY(CAP2_UL_MU_PARTIAL_MU_MIMO, elem->phy_cap_info[2]);
 
 	memcpy(&msta->last_mcu.sta_rec_muru, muru, sizeof(*muru));
 }
@@ -1896,10 +1928,15 @@ mt7915_mcu_sta_bfer_he(struct ieee80211_sta *sta, struct ieee80211_vif *vif,
 
 	bf->tx_mode = MT_PHY_TYPE_HE_SU;
 	mt7915_mcu_sta_sounding_rate(bf);
-	bf->trigger_su = HE_PHY(CAP6_TRIG_SU_BEAMFORMING_FB,
-				pe->phy_cap_info[6]);
-	bf->trigger_mu = HE_PHY(CAP6_TRIG_MU_BEAMFORMING_PARTIAL_BW_FB,
-				pe->phy_cap_info[6]);
+
+	/* TODO:  Ryder thinks this probably doesn't need to be disabled */
+	if (!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) {
+		bf->trigger_su = HE_PHY(CAP6_TRIG_SU_BEAMFORMING_FB,
+					pe->phy_cap_info[6]);
+		bf->trigger_mu = HE_PHY(CAP6_TRIG_MU_BEAMFORMING_PARTIAL_BW_FB,
+					pe->phy_cap_info[6]);
+	}
+
 	bfer_nr = HE_PHY(CAP5_BEAMFORMEE_NUM_SND_DIM_UNDER_80MHZ_MASK,
 			 ve->phy_cap_info[5]);
 	bfee_nr = HE_PHY(CAP4_BEAMFORMEE_MAX_STS_UNDER_80MHZ_MASK,
