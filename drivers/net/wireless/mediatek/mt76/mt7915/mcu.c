@@ -450,7 +450,7 @@ exit:
 	return mt76_tx_queue_skb_raw(dev, mdev->q_mcu[qid], skb, 0);
 }
 
-static void
+static int
 mt7915_mcu_wa_cmd(struct mt7915_dev *dev, int cmd, u32 a1, u32 a2, u32 a3)
 {
 	struct {
@@ -463,7 +463,7 @@ mt7915_mcu_wa_cmd(struct mt7915_dev *dev, int cmd, u32 a1, u32 a2, u32 a3)
 		},
 	};
 
-	mt76_mcu_send_msg(&dev->mt76, cmd, &req, sizeof(req), true);
+	return mt76_mcu_send_msg(&dev->mt76, cmd, &req, sizeof(req), true);
 }
 
 static void
@@ -2997,18 +2997,30 @@ int mt7915_mcu_init(struct mt7915_dev *dev)
 
 		/* enable debugging on bootup */
 		dev->fw_debug = 1;
-		mt7915_mcu_fw_log_2_host(dev, 2);
-		for (debug = DEBUG_TXCMD; debug <= DEBUG_RPT_RX; debug++)
-			mt7915_mcu_fw_dbg_ctrl(dev, debug, dev->fw_debug);
+		ret = mt7915_mcu_fw_log_2_host(dev, 2);
+		if (ret)
+			return ret;
+		for (debug = DEBUG_TXCMD; debug <= DEBUG_RPT_RX; debug++) {
+			ret = mt7915_mcu_fw_dbg_ctrl(dev, debug, dev->fw_debug);
+			if (ret)
+				return ret;
+		}
 	}
 	else {
-		mt7915_mcu_fw_log_2_host(dev, 0);
+		ret = mt7915_mcu_fw_log_2_host(dev, 0);
+		if (ret)
+			return ret;
 	}
 
 	mt7915_mcu_set_mwds(dev, 1);
 	mt7915_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET), MCU_WA_PARAM_RED, 0, 0);
 
-	return 0;
+	ret = mt7915_mcu_set_mwds(dev, 1);
+	if (ret)
+		return ret;
+
+	return mt7915_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET),
+				 MCU_WA_PARAM_RED, 0, 0);
 }
 
 void mt7915_mcu_exit(struct mt7915_dev *dev)
