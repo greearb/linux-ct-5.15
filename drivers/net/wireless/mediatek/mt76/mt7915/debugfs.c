@@ -1227,8 +1227,8 @@ mt7915_mcu_settings_show(struct seq_file *file, void *data)
 	S_MCU_U8(sta_rec_bf.rept_poll_rate);
 	S_MCU_U8(sta_rec_bf.tx_mode);
 	S_MCU_U8(sta_rec_bf.bf_cap);
-	S_MCU_U8(sta_rec_bf.nc);
-	S_MCU_U8(sta_rec_bf.nr);
+	S_MCU_U8(sta_rec_bf.ncol);
+	S_MCU_U8(sta_rec_bf.nrow);
 	S_MCU_U8(sta_rec_bf.bw);
 	S_MCU_U8(sta_rec_bf.mem_total);
 	S_MCU_U8(sta_rec_bf.mem_20m);
@@ -1244,8 +1244,8 @@ mt7915_mcu_settings_show(struct seq_file *file, void *data)
 	S_MCU_U8(sta_rec_bf.ibf_dbw);
 	S_MCU_U8(sta_rec_bf.ibf_ncol);
 	S_MCU_U8(sta_rec_bf.ibf_nrow);
-	S_MCU_U8(sta_rec_bf.nr_bw160);
-	S_MCU_U8(sta_rec_bf.nc_bw160);
+	S_MCU_U8(sta_rec_bf.nrow_bw160);
+	S_MCU_U8(sta_rec_bf.ncol_bw160);
 	S_MCU_U8(sta_rec_bf.ru_start_idx);
 	S_MCU_U8(sta_rec_bf.ru_end_idx);
 	S_MCU_U8(sta_rec_bf.trigger_su);
