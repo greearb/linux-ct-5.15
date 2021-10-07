@@ -1534,6 +1534,7 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	struct ieee80211_he_cap_elem *elem = &he_cap->he_cap_elem;
 	struct sta_rec_muru *muru;
 	struct tlv *tlv;
+	//struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
 
 	tlv = mt7915_mcu_add_tlv(skb, STA_REC_MURU, sizeof(*muru));
 
@@ -1602,10 +1603,10 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	/* A non-AP HE station must support MU beamformee */
 	if (vif->type == NL80211_IFTYPE_STATION && vif->bss_conf.he_support)
 		muru->cfg.mimo_dl_en = true;
-	else
-		muru->cfg.mimo_dl_en = mvif->cap.he_mu_ebfer ||
-				       mvif->cap.vht_mu_ebfer ||
-				       mvif->cap.vht_mu_ebfee;
+	//else
+	//	muru->cfg.mimo_dl_en = mvif->cap.he_mu_ebfer ||
+	//			       mvif->cap.vht_mu_ebfer ||
+	//			       mvif->cap.vht_mu_ebfee;
 
 	muru->mimo_dl.vht_mu_bfee =
 		!!(sta->vht_cap.cap & IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE);
@@ -2141,7 +2142,7 @@ mt7915_mcu_add_txbf(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 		if (IS_ERR(skb))
 			return PTR_ERR(skb);
 
-		mt7915_mcu_sta_bfer_tlv(skb, sta, vif, phy, enable, ebfer, msta);
+		mt7915_mcu_sta_bfer_tlv(skb, sta, vif, phy, enable, ebf, msta);
 
 		r = mt76_mcu_skb_send_msg(&dev->mt76, skb,
 					  MCU_EXT_CMD(STA_REC_UPDATE), true);
