@@ -1574,6 +1574,9 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 
 	muru = (struct sta_rec_muru *)tlv;
 
+	if (!sta->he_cap.has_he)
+		goto after_ofdma;
+
 	muru->cfg.mimo_ul_en = true;
 
 	if (!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) {
@@ -1642,11 +1645,13 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	//			       mvif->cap.vht_mu_ebfer ||
 	//			       mvif->cap.vht_mu_ebfee;
 
+	muru->mimo_ul.full_ul_mimo =
+		HE_PHY(CAP2_UL_MU_FULL_MU_MIMO, elem->phy_cap_info[2]);
+
+after_ofdma:
 	muru->mimo_dl.vht_mu_bfee =
 		!!(sta->vht_cap.cap & IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE);
 
-	muru->mimo_ul.full_ul_mimo =
-		HE_PHY(CAP2_UL_MU_FULL_MU_MIMO, elem->phy_cap_info[2]);
 
 	memcpy(&msta->last_mcu.sta_rec_muru, muru, sizeof(*muru));
 }
@@ -2381,8 +2386,7 @@ mt7915_mcu_add_mu(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 	/* wait until TxBF and MU ready to update stare vht */
 
 	/* starec muru */
-	if (sta->he_cap.has_he)
-		mt7915_mcu_sta_muru_tlv(skb, sta, vif, msta);
+	mt7915_mcu_sta_muru_tlv(skb, sta, vif, msta);
 
 	/* starec vht */
 	mt7915_mcu_sta_vht_tlv(skb, sta, msta);
