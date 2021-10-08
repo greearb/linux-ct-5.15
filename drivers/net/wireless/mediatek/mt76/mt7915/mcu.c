@@ -2347,7 +2347,9 @@ mt7915_mcu_add_mu(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 	/* wait until TxBF and MU ready to update stare vht */
 
 	/* starec muru */
-	mt7915_mcu_sta_muru_tlv(skb, sta, vif, msta);
+	if (sta->he_cap.has_he)
+		mt7915_mcu_sta_muru_tlv(skb, sta, vif, msta);
+
 	/* starec vht */
 	mt7915_mcu_sta_vht_tlv(skb, sta, msta);
 
