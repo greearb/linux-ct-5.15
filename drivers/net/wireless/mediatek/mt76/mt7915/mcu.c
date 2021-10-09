@@ -1878,7 +1878,7 @@ int mt7915_mcu_add_smps(struct mt7915_dev *dev, struct ieee80211_vif *vif,
 				     MCU_EXT_CMD(STA_REC_UPDATE), true);
 }
 
-static inline bool
+static bool
 mt7915_is_ebf_supported(struct mt7915_phy *phy, struct ieee80211_vif *vif,
 			struct ieee80211_sta *sta, bool bfee)
 {
@@ -1893,12 +1893,8 @@ mt7915_is_ebf_supported(struct mt7915_phy *phy, struct ieee80211_vif *vif,
 
 	if (sta->he_cap.has_he) {
 		struct ieee80211_he_cap_elem *pe;
-		const struct ieee80211_he_cap_elem *ve;
-		const struct ieee80211_sta_he_cap *vc;
 
 		pe = &sta->he_cap.he_cap_elem;
-		vc = mt7915_get_he_phy_cap(phy, vif);
-		ve = &vc->he_cap_elem;
 
 		if (bfee)
 			return !!(HE_PHY(CAP3_SU_BEAMFORMER, pe->phy_cap_info[3]));
@@ -1916,7 +1912,7 @@ mt7915_is_ebf_supported(struct mt7915_phy *phy, struct ieee80211_vif *vif,
 		if (bfee)
 			return !!(pc->cap & IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE);
 		else
-			return !!(vc->cap & IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE);
+			return false; /* return !!(vc->cap & IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE); */
 	}
 
 	return false;
