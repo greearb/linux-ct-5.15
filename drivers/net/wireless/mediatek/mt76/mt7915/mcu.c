@@ -1457,6 +1457,10 @@ mt7915_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 
 	if (!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) {
 		if (elem->phy_cap_info[6] &
+		    IEEE80211_HE_PHY_CAP6_TRIG_CQI_FB)
+			cap |= STA_REC_HE_CAP_TRIG_CQI_FK;
+
+		if (elem->phy_cap_info[6] &
 		    IEEE80211_HE_PHY_CAP6_PARTIAL_BW_EXT_RANGE)
 			cap |= STA_REC_HE_CAP_PARTIAL_BW_EXT_RANGE;
 	}
@@ -1482,10 +1486,6 @@ mt7915_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 		cap |= STA_REC_HE_CAP_ER_SU_PPDU_1LTF_8US_GI;
 
 	if (!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) {
-		if (elem->phy_cap_info[9] &
-		    IEEE80211_HE_PHY_CAP9_NON_TRIGGERED_CQI_FEEDBACK)
-			cap |= STA_REC_HE_CAP_TRIG_CQI_FK;
-
 		if (elem->phy_cap_info[9] &
 		    IEEE80211_HE_PHY_CAP9_TX_1024_QAM_LESS_THAN_242_TONE_RU)
 			cap |= STA_REC_HE_CAP_TX_1024QAM_UNDER_RU242;
