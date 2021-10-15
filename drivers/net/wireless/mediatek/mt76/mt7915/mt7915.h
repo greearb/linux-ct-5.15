@@ -143,12 +143,24 @@ struct mt7915_vif_last_mcu {
 	struct bss_info_bmc_rate bss_info_bmc_rate;
 };
 
+struct mt7915_vif_cap {
+	bool ldpc:1;
+	bool vht_su_ebfer:1;
+	bool vht_su_ebfee:1;
+	bool vht_mu_ebfer:1;
+	bool vht_mu_ebfee:1;
+	bool he_su_ebfer:1;
+	bool he_su_ebfee:1;
+	bool he_mu_ebfer:1;
+};
+
 struct mt7915_vif {
 	u16 idx;
 	u8 omac_idx;
 	u8 band_idx;
 	u8 wmm_idx;
 
+	struct mt7915_vif_cap cap;
 	struct mt7915_sta sta;
 	struct mt7915_phy *phy;
 
