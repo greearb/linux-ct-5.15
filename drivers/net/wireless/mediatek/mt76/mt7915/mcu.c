@@ -1587,7 +1587,7 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	struct sta_rec_muru *muru;
 	struct tlv *tlv;
 
-	if (!sta->vht_cap.vht_supported && !sta->he_cap.has_he)
+	if (!sta->vht_cap.vht_supported)
 		return;
 
 	tlv = mt7915_mcu_add_tlv(skb, STA_REC_MURU, sizeof(*muru));
@@ -1597,13 +1597,10 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 	if (!sta->he_cap.has_he)
 		goto after_he;
 
-	muru->cfg.mimo_ul_en = true;
-
 	if (!(sta->mgd_flags & IEEE80211_STA_DISABLE_OFDMA)) {
 		pr_info("STA: %pM  sta-muru-tlv, enabling OFDMA", sta->addr);
 		muru->cfg.ofdma_dl_en = true;
-		/* mimo_ul_en not stable yet (Aug 9, 2021 */
-		/* muru->cfg.mimo_ul_en = true; */
+		muru->cfg.mimo_ul_en = true;
 		muru->cfg.ofdma_ul_en = true;
 
 		muru->mimo_dl.partial_bw_dl_mimo =
@@ -1619,9 +1616,6 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 			HE_PHY(CAP8_20MHZ_IN_160MHZ_HE_PPDU, elem->phy_cap_info[8]);
 		muru->ofdma_dl.he_80m_in_160m =
 			HE_PHY(CAP8_80MHZ_IN_160MHZ_HE_PPDU, elem->phy_cap_info[8]);
-		muru->ofdma_dl.lt16_sigb = 0;
-		muru->ofdma_dl.rx_su_comp_sigb = 0;
-		muru->ofdma_dl.rx_su_non_comp_sigb = 0;
 
 		muru->ofdma_ul.t_frame_dur =
 			HE_MAC(CAP1_TF_MAC_PAD_DUR_MASK, elem->mac_cap_info[1]);
@@ -1629,33 +1623,10 @@ mt7915_mcu_sta_muru_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 			HE_MAC(CAP2_MU_CASCADING, elem->mac_cap_info[2]);
 		muru->ofdma_ul.uo_ra =
 			HE_MAC(CAP3_OFDMA_RA, elem->mac_cap_info[3]);
-		muru->ofdma_ul.he_2x996_tone = 0;
-		muru->ofdma_ul.rx_t_frame_11ac = 0;
 	}
 	else {
 		pr_info("STA: %pM  sta-muru-tlv, NOT enabling OFDMA", sta->addr);
 	}
-
-	muru->ofdma_dl.punc_pream_rx =
-		HE_PHY(CAP1_PREAMBLE_PUNC_RX_MASK, elem->phy_cap_info[1]);
-	muru->ofdma_dl.he_20m_in_40m_2g =
-		HE_PHY(CAP8_20MHZ_IN_40MHZ_HE_PPDU_IN_2G, elem->phy_cap_info[8]);
-	muru->ofdma_dl.he_20m_in_160m =
-		HE_PHY(CAP8_20MHZ_IN_160MHZ_HE_PPDU, elem->phy_cap_info[8]);
-	muru->ofdma_dl.he_80m_in_160m =
-		HE_PHY(CAP8_80MHZ_IN_160MHZ_HE_PPDU, elem->phy_cap_info[8]);
-	muru->ofdma_dl.lt16_sigb = 0;
-	muru->ofdma_dl.rx_su_comp_sigb = 0;
-	muru->ofdma_dl.rx_su_non_comp_sigb = 0;
-
-	muru->ofdma_ul.t_frame_dur =
-		HE_MAC(CAP1_TF_MAC_PAD_DUR_MASK, elem->mac_cap_info[1]);
-	muru->ofdma_ul.mu_cascading =
-		HE_MAC(CAP2_MU_CASCADING, elem->mac_cap_info[2]);
-	muru->ofdma_ul.uo_ra =
-		HE_MAC(CAP3_OFDMA_RA, elem->mac_cap_info[3]);
-	muru->ofdma_ul.he_2x996_tone = 0;
-	muru->ofdma_ul.rx_t_frame_11ac = 0;
 
 	muru->mimo_ul.full_ul_mimo =
 		HE_PHY(CAP2_UL_MU_FULL_MU_MIMO, elem->phy_cap_info[2]);
@@ -3075,6 +3046,47 @@ int mt7915_mcu_set_muru_ctrl(struct mt7915_dev *dev, u32 cmd, u32 val)
 				 sizeof(req), false);
 }
 
+static int
+mt7915_mcu_init_rx_airtime(struct mt7915_dev *dev)
+{
+#define RX_AIRTIME_FEATURE_CTRL		1
+#define RX_AIRTIME_BITWISE_CTRL		2
+#define RX_AIRTIME_CLEAR_EN	1
+	struct {
+		__le16 field;
+		__le16 sub_field;
+		__le32 set_status;
+		__le32 get_status;
+		u8 _rsv[12];
+
+		bool airtime_en;
+		bool mibtime_en;
+		bool earlyend_en;
+		u8 _rsv1[9];
+
+		bool airtime_clear;
+		bool mibtime_clear;
+		u8 _rsv2[98];
+	} __packed req = {
+		.field = cpu_to_le16(RX_AIRTIME_BITWISE_CTRL),
+		.sub_field = cpu_to_le16(RX_AIRTIME_CLEAR_EN),
+		.airtime_clear = true,
+	};
+	int ret;
+
+	ret = mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(RX_AIRTIME_CTRL), &req,
+				sizeof(req), true);
+	if (ret)
+		return ret;
+
+	req.field = cpu_to_le16(RX_AIRTIME_FEATURE_CTRL);
+	req.sub_field = cpu_to_le16(RX_AIRTIME_CLEAR_EN);
+	req.airtime_en = true;
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(RX_AIRTIME_CTRL), &req,
+				 sizeof(req), true);
+}
+
 int mt7915_mcu_init(struct mt7915_dev *dev)
 {
 	static const struct mt76_mcu_ops mt7915_mcu_ops = {
@@ -3117,6 +3129,11 @@ int mt7915_mcu_init(struct mt7915_dev *dev)
 	}
 
 	mt7915_mcu_set_mwds(dev, 1);
+
+	ret = mt7915_mcu_init_rx_airtime(dev);
+	if (ret)
+		return ret;
+
 	mt7915_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET), MCU_WA_PARAM_RED, 0, 0);
 
 	ret = mt7915_mcu_set_mwds(dev, 1);
@@ -3125,6 +3142,10 @@ int mt7915_mcu_init(struct mt7915_dev *dev)
 
 	ret = mt7915_mcu_set_muru_ctrl(dev, MURU_SET_PLATFORM_TYPE,
 				       MURU_PLATFORM_TYPE_PERF_LEVEL_2);
+	if (ret)
+		return ret;
+
+	ret = mt7915_mcu_init_rx_airtime(dev);
 	if (ret)
 		return ret;
 
