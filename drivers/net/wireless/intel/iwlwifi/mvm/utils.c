@@ -184,7 +184,7 @@ int iwl_mvm_legacy_rate_to_mac80211_idx(u32 rate_n_flags,
 	if (band != NL80211_BAND_2GHZ)
 		band_offset = IWL_FIRST_OFDM_RATE;
 	for (idx = band_offset; idx < IWL_RATE_COUNT_LEGACY; idx++)
-		if (fw_rate_idx_to_plcp[idx] == rate)
+		if (iwl_fw_rate_idx_to_plcp(idx) == rate)
 			return idx - band_offset;
 
 	return -1;
@@ -193,7 +193,7 @@ int iwl_mvm_legacy_rate_to_mac80211_idx(u32 rate_n_flags,
 u8 iwl_mvm_mac80211_idx_to_hwrate(int rate_idx)
 {
 	/* Get PLCP rate for tx_cmd->rate_n_flags */
-	return fw_rate_idx_to_plcp[rate_idx];
+	return iwl_fw_rate_idx_to_plcp(rate_idx);
 }
 
 u8 iwl_mvm_mac80211_ac_to_ucode_ac(enum ieee80211_ac_numbers ac)
