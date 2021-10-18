@@ -1901,17 +1901,17 @@ mt7915_is_ebf_supported(struct mt7915_phy *phy, struct ieee80211_vif *vif,
 	}
 
 	if (sta->vht_cap.vht_supported) {
-		struct ieee80211_sta_vht_cap *pc;
-		struct ieee80211_sta_vht_cap *vc;
-
-		pc = &sta->vht_cap;
-		vc = &phy->mt76->sband_5g.sband.vht_cap;
+		u32 cap = sta->vht_cap.cap;
 
 		if (bfee)
 			return mvif->cap.vht_su_ebfee &&
-				(pc->cap & IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE);
+				(cap & IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE);
 		else
-			return false; /* return !!(vc->cap & IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE); */
+			if (vif->type == NL80211_IFTYPE_AP)
+				return mvif->cap.vht_su_ebfer &&
+					(cap & IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE);
+			else
+				return false; /* STA MODE does not support VHT BFER mode. */
 	}
 
 	return false;
