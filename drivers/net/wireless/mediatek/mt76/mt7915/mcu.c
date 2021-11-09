@@ -1911,7 +1911,7 @@ mt7915_is_ebf_supported(struct mt7915_phy *phy, struct ieee80211_vif *vif,
 				return mvif->cap.vht_su_ebfer &&
 					(cap & IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE);
 			else
-				return false; /* STA MODE does not support VHT BFER mode. */
+				return false; /* STA MODE does not support BFER mode. */
 	}
 
 	return false;
