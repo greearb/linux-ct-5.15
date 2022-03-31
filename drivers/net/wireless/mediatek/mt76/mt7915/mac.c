@@ -696,11 +696,6 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb)
 			}
 			status->rate_idx = i;
 
-			if (stbc) {
-				nss *= 2;
-				WARN_ON_ONCE(nss > 4);
-			}
-
 			if (mstats) {
 				if (nss > 3)
 					mstats->rx_nss[3]++;
